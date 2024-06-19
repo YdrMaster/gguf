@@ -1,0 +1,8 @@
+[package]
+name = "gguf"
+version = "0.1.0"
+edition = "2021"
+authors = ["YdrMaster <ydrml@hotmail.com>"]
+
+[dependencies]
+memmap2 = "0.9"
