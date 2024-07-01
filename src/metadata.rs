@@ -1,4 +1,4 @@
-﻿use std::{borrow::Borrow, ops::Deref, str::Utf8Error};
+﻿use std::{collections::HashMap, mem::size_of, slice::from_raw_parts, str::Utf8Error};
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u32)]
@@ -36,36 +36,65 @@ pub enum GGufMetaDataValueType {
     F64 = 12,
 }
 
-#[inline]
-pub fn scan<'a>(
-    count: usize,
-    data: &'a [u8],
-) -> Result<(Vec<MetaDataKV<'a>>, usize), MetaDataError> {
-    let mut reader = MetaReader::new(data);
-    let mut ans = Vec::with_capacity(count);
-    for _ in 0..count {
-        let (key, ty) = reader.read_kv_header()?;
-        skip_value(ty, &mut reader)?;
-        ans.push(MetaDataKV(key));
-    }
-    Ok((ans, reader.cursor))
+pub struct MetaDataPairs<'a> {
+    indices: HashMap<&'a str, usize>,
+    len: usize,
 }
 
-fn skip_value(ty: GGufMetaDataValueType, reader: &mut MetaReader) -> Result<(), MetaDataError> {
+impl<'a> MetaDataPairs<'a> {
+    pub fn scan(count: usize, data: &'a [u8]) -> Result<Self, MetaDataError<'a>> {
+        let mut reader = MetaReader { data, cursor: 0 };
+        let mut indices = HashMap::with_capacity(count);
+        for _ in 0..count {
+            let (key, ty) = reader.read_kv_header()?;
+            let begin = reader.cursor;
+            skip_value(ty, &mut reader)?;
+            if indices.insert(key, reader.cursor - begin).is_some() {
+                return Err(MetaDataError::DuplicatedKey(key));
+            }
+        }
+        Ok(Self {
+            indices,
+            len: reader.cursor,
+        })
+    }
+
+    #[inline]
+    pub fn keys<'s>(&'s self) -> impl Iterator<Item = &'a str> + 's {
+        self.indices.keys().copied()
+    }
+
+    #[inline]
+    pub const fn nbytes(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    pub fn get(&self, key: &str) -> Option<MetaDataKV<'a>> {
+        self.indices
+            .get_key_value(key)
+            .map(|(&key, &len)| MetaDataKV { key, len })
+    }
+}
+
+fn skip_value<'a>(
+    ty: GGufMetaDataValueType,
+    reader: &mut MetaReader<'a>,
+) -> Result<(), MetaDataError<'a>> {
     use GGufMetaDataValueType as Ty;
     match ty {
-        Ty::U8 => reader.read::<u8>().map(|_| ()),
-        Ty::I8 => reader.read::<i8>().map(|_| ()),
-        Ty::U16 => reader.read::<u16>().map(|_| ()),
-        Ty::I16 => reader.read::<i16>().map(|_| ()),
-        Ty::U32 => reader.read::<u32>().map(|_| ()),
-        Ty::I32 => reader.read::<i32>().map(|_| ()),
-        Ty::F32 => reader.read::<f32>().map(|_| ()),
+        Ty::U8 => reader.read::<u8>().map(drop),
+        Ty::I8 => reader.read::<i8>().map(drop),
+        Ty::U16 => reader.read::<u16>().map(drop),
+        Ty::I16 => reader.read::<i16>().map(drop),
+        Ty::U32 => reader.read::<u32>().map(drop),
+        Ty::I32 => reader.read::<i32>().map(drop),
+        Ty::F32 => reader.read::<f32>().map(drop),
         Ty::BOOL => match reader.read::<u8>()? {
             0 | 1 => Ok(()),
             e => Err(MetaDataError::Bool(e)),
         },
-        Ty::STRING => reader.read_str().map(|_| ()),
+        Ty::STRING => reader.read_str().map(drop),
         Ty::ARRAY => {
             let (dt, len) = reader.read_arr_header()?;
             for _ in 0..len {
@@ -73,52 +102,48 @@ fn skip_value(ty: GGufMetaDataValueType, reader: &mut MetaReader) -> Result<(), 
             }
             Ok(())
         }
-        Ty::U64 => reader.read::<u64>().map(|_| ()),
-        Ty::I64 => reader.read::<i64>().map(|_| ()),
-        Ty::F64 => reader.read::<f64>().map(|_| ()),
+        Ty::U64 => reader.read::<u64>().map(drop),
+        Ty::I64 => reader.read::<i64>().map(drop),
+        Ty::F64 => reader.read::<f64>().map(drop),
     }
 }
 
-#[repr(transparent)]
-pub struct MetaDataKV<'a>(&'a str);
+pub struct MetaDataKV<'a> {
+    key: &'a str,
+    len: usize,
+}
 
 impl<'a> MetaDataKV<'a> {
     #[inline]
     pub fn key(&self) -> &'a str {
-        self.0
+        self.key
     }
 
     #[inline]
     pub fn ty(&self) -> GGufMetaDataValueType {
         unsafe {
-            self.0
+            self.key
                 .as_ptr()
-                .add(self.0.len())
+                .add(self.key.len())
                 .cast::<GGufMetaDataValueType>()
                 .read_unaligned()
         }
     }
-}
 
-impl AsRef<str> for MetaDataKV<'_> {
     #[inline]
-    fn as_ref(&self) -> &str {
-        self.0
-    }
-}
-
-impl Borrow<str> for MetaDataKV<'_> {
-    #[inline]
-    fn borrow(&self) -> &str {
-        self.0
-    }
-}
-
-impl Deref for MetaDataKV<'_> {
-    type Target = str;
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.0
+    pub fn value_reader(&self) -> MetaReader<'a> {
+        MetaReader {
+            data: unsafe {
+                from_raw_parts(
+                    self.key
+                        .as_ptr()
+                        .add(self.key.len())
+                        .add(size_of::<GGufMetaDataValueType>()),
+                    self.len,
+                )
+            },
+            cursor: 0,
+        }
     }
 }
 
@@ -128,20 +153,16 @@ pub struct MetaReader<'a> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum MetaDataError {
+pub enum MetaDataError<'a> {
     Eos,
+    DuplicatedKey(&'a str),
     Utf8(Utf8Error),
     Bool(u8),
 }
 
 impl<'a> MetaReader<'a> {
-    #[inline]
-    pub fn new(data: &'a [u8]) -> Self {
-        Self { data, cursor: 0 }
-    }
-
-    pub fn read<U: Copy>(&mut self) -> Result<U, MetaDataError> {
-        let len = std::mem::size_of::<U>();
+    pub fn read<U: Copy>(&mut self) -> Result<U, MetaDataError<'a>> {
+        let len = size_of::<U>();
         let data = &self.data[self.cursor..];
         if data.len() >= len {
             self.cursor += len;
@@ -152,7 +173,7 @@ impl<'a> MetaReader<'a> {
         }
     }
 
-    pub fn read_str(&mut self) -> Result<&'a str, MetaDataError> {
+    pub fn read_str(&mut self) -> Result<&'a str, MetaDataError<'a>> {
         let len = self.read::<u64>()? as usize;
         let data = &self.data[self.cursor..];
         if data.len() >= len {
@@ -164,14 +185,14 @@ impl<'a> MetaReader<'a> {
     }
 
     #[inline]
-    pub fn read_kv_header(&mut self) -> Result<(&'a str, GGufMetaDataValueType), MetaDataError> {
+    fn read_kv_header(&mut self) -> Result<(&'a str, GGufMetaDataValueType), MetaDataError<'a>> {
         let id = self.read_str()?;
         let ty = self.read()?;
         Ok((id, ty))
     }
 
     #[inline]
-    pub fn read_arr_header(&mut self) -> Result<(GGufMetaDataValueType, usize), MetaDataError> {
+    pub fn read_arr_header(&mut self) -> Result<(GGufMetaDataValueType, usize), MetaDataError<'a>> {
         let ty = self.read()?;
         let len = self.read()?;
         Ok((ty, len))

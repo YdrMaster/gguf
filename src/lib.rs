@@ -3,7 +3,7 @@ mod metadata;
 mod name;
 
 pub use header::GGufFileHeader;
-pub use metadata::{GGufMetaDataValueType, MetaReader};
+pub use metadata::{GGufMetaDataValueType, MetaDataError, MetaDataPairs};
 pub use name::GGufFileName;
 
 #[test]
@@ -20,13 +20,13 @@ fn test_gguf() {
     let header = unsafe { file.as_ptr().cast::<GGufFileHeader>().read() };
     println!("{header:?} {}", header.is_magic_correct());
 
-    let (keys, _bytes) = metadata::scan(
+    let pairs = MetaDataPairs::scan(
         header.metadata_kv_count(),
         &file[size_of::<GGufFileHeader>()..],
     )
     .unwrap();
 
-    for kv in keys {
-        println!("{} {:?}", kv.key(), kv.ty());
+    for key in pairs.keys() {
+        println!("{key}");
     }
 }
