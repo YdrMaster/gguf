@@ -1,5 +1,5 @@
 ﻿use super::{GGufMetaDataValueType, GGufMetaKVPairs};
-use crate::reader::GGmlReader;
+use crate::reader::GGufReader;
 use std::marker::PhantomData;
 
 #[repr(transparent)]
@@ -36,10 +36,10 @@ macro_rules! get {
     };
 }
 
-pub struct GGufArray<'a, T: ?Sized>(GGmlReader<'a>, usize, PhantomData<T>);
+pub struct GGufArray<'a, T: ?Sized>(GGufReader<'a>, usize, PhantomData<T>);
 
 impl<'a, T: ?Sized> GGufArray<'a, T> {
-    pub fn new_typed(mut reader: GGmlReader<'a>, ty: GGufMetaDataValueType) -> Self {
+    pub fn new_typed(mut reader: GGufReader<'a>, ty: GGufMetaDataValueType) -> Self {
         let (ty_, len) = reader.read_arr_header().unwrap();
         assert_eq!(ty, ty_);
         Self(reader, len, PhantomData)
@@ -48,21 +48,21 @@ impl<'a, T: ?Sized> GGufArray<'a, T> {
 
 impl<'a> GGufArray<'a, i32> {
     #[inline]
-    pub fn new(reader: GGmlReader<'a>) -> Self {
+    pub fn new(reader: GGufReader<'a>) -> Self {
         Self::new_typed(reader, GGufMetaDataValueType::I32)
     }
 }
 
 impl<'a> GGufArray<'a, f32> {
     #[inline]
-    pub fn new(reader: GGmlReader<'a>) -> Self {
+    pub fn new(reader: GGufReader<'a>) -> Self {
         Self::new_typed(reader, GGufMetaDataValueType::F32)
     }
 }
 
 impl<'a> GGufArray<'a, str> {
     #[inline]
-    pub fn new(reader: GGmlReader<'a>) -> Self {
+    pub fn new(reader: GGufReader<'a>) -> Self {
         Self::new_typed(reader, GGufMetaDataValueType::String)
     }
 }

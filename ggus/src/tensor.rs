@@ -1,5 +1,5 @@
 ﻿use crate::{
-    reader::{GGmlReadError, GGmlReader},
+    reader::{GGufReadError, GGufReader},
     sizeof,
 };
 use std::{
@@ -51,8 +51,8 @@ pub struct GGufTensors<'a> {
 }
 
 impl<'a> GGufTensors<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGmlReadError<'a>> {
-        let mut reader = GGmlReader::new(data);
+    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
+        let mut reader = GGufReader::new(data);
         let mut indices = HashMap::with_capacity(count as _);
         for _ in 0..count {
             let name = reader.read_str()?;
@@ -61,7 +61,7 @@ impl<'a> GGufTensors<'a> {
             reader.skip::<u32>(1)?;
             reader.skip::<u64>(1)?;
             if indices.insert(name, ()).is_some() {
-                return Err(GGmlReadError::DuplicatedKey(name));
+                return Err(GGufReadError::DuplicatedKey(name));
             }
         }
         Ok(Self {

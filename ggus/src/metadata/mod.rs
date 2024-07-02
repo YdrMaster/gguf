@@ -5,7 +5,7 @@ mod llm;
 mod tokenizer;
 
 use crate::{
-    reader::{GGmlReadError, GGmlReader},
+    reader::{GGufReadError, GGufReader},
     sizeof,
 };
 use std::{collections::HashMap, slice::from_raw_parts};
@@ -81,8 +81,8 @@ pub struct GGufMetaKVPairs<'a> {
 }
 
 impl<'a> GGufMetaKVPairs<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGmlReadError<'a>> {
-        let mut reader = GGmlReader::new(data);
+    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
+        let mut reader = GGufReader::new(data);
         let mut indices = HashMap::with_capacity(count as _);
         for _ in 0..count {
             let key = reader.read_str()?;
@@ -90,7 +90,7 @@ impl<'a> GGufMetaKVPairs<'a> {
             let begin = reader.cursor();
             skip_value(ty, &mut reader, 1)?;
             if indices.insert(key, reader.cursor() - begin).is_some() {
-                return Err(GGmlReadError::DuplicatedKey(key));
+                return Err(GGufReadError::DuplicatedKey(key));
             }
         }
         Ok(Self {
@@ -126,7 +126,7 @@ impl<'a> GGufMetaKVPairs<'a> {
         &self,
         name: impl AsRef<str>,
         ty: GGufMetaDataValueType,
-    ) -> Option<GGmlReader<'a>> {
+    ) -> Option<GGufReader<'a>> {
         self.get(name).map(|kv| {
             assert_eq!(kv.ty(), ty);
             kv.value_reader()
@@ -136,9 +136,9 @@ impl<'a> GGufMetaKVPairs<'a> {
 
 fn skip_value<'a>(
     ty: GGufMetaDataValueType,
-    reader: &mut GGmlReader<'a>,
+    reader: &mut GGufReader<'a>,
     len: usize,
-) -> Result<(), GGmlReadError<'a>> {
+) -> Result<(), GGufReadError<'a>> {
     use GGufMetaDataValueType as Ty;
     match ty {
         Ty::U8 => reader.skip::<u8>(len),
@@ -194,8 +194,8 @@ impl<'a> GGufMetaKV<'a> {
     }
 
     #[inline]
-    pub fn value_reader(&self) -> GGmlReader<'a> {
-        GGmlReader::new(unsafe {
+    pub fn value_reader(&self) -> GGufReader<'a> {
+        GGufReader::new(unsafe {
             from_raw_parts(
                 self.key
                     .as_ptr()

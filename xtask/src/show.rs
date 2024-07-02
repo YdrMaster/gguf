@@ -1,23 +1,68 @@
 ﻿use ggus::{
-    GGmlReadError, GGmlReader, GGufFileHeader, GGufMetaKV, GGufMetaKVPairs, GGufTensorInfo,
+    GGufFileHeader, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader, GGufTensorInfo,
     GGufTensors,
 };
-use std::{fmt::Display, fs::File, path::PathBuf};
+use std::{
+    fmt::{self, Display},
+    fs::File,
+    path::PathBuf,
+};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
     #[clap(long, short)]
     file: PathBuf,
+    #[clap(long)]
+    shards: bool,
 }
 
 impl ShowArgs {
     pub fn show(self) {
         if self.file.is_file() {
-            let file = File::open(self.file).unwrap();
-            let file = unsafe { memmap2::Mmap::map(&file) }.unwrap();
-            show(&file);
+            let files = if self.shards {
+                let stem = self
+                    .file
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .split('-')
+                    .collect::<Vec<_>>();
+                if let [head @ .., i, "of", s] = &*stem {
+                    let len = i.len();
+                    assert_eq!(s.len(), len);
+                    let head = head.join("-");
+                    let ext = self.file.extension().unwrap().to_str().unwrap();
+                    (1..=s.parse::<usize>().unwrap())
+                        .map(|i| {
+                            let file_name = format!("{head}-{i:0len$}-of-{s}.{ext}");
+                            self.file.with_file_name(file_name)
+                        })
+                        .filter(|p| p.is_file())
+                        .collect::<Vec<_>>()
+                } else {
+                    vec![self.file]
+                }
+            } else {
+                vec![self.file]
+            };
+
+            for file in files {
+                let file_name = file.file_name().unwrap().to_str().unwrap();
+                println!("+{}+", "-".repeat(file_name.len() + 2));
+                println!("| {} |", file_name);
+                println!("+{}+", "-".repeat(file_name.len() + 2));
+                println!();
+
+                let file = File::open(file).unwrap();
+                let file = unsafe { memmap2::Mmap::map(&file) }.unwrap();
+                show(&file);
+
+                println!();
+            }
         } else {
-            todo!()
+            println!("{ERR}File not found: {}", self.file.display());
+            exit();
         }
     }
 }
@@ -115,7 +160,7 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize) {
     fn show<T: Display>(
         kv: GGufMetaKV,
         width: usize,
-        f: impl FnOnce(GGmlReader) -> Result<T, GGmlReadError>,
+        f: impl FnOnce(GGufReader) -> Result<T, GGufReadError>,
     ) {
         let key = kv.key();
         match f(kv.value_reader()) {
@@ -126,6 +171,26 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize) {
                 println!("{ERR}{key:width$} {e:?}");
                 exit();
             }
+        }
+    }
+
+    fn show_str<'a>(reader: &mut GGufReader<'a>) -> Result<String, GGufReadError<'a>> {
+        let str = reader.read_str()?;
+        if str.lines().nth(1).is_some() {
+            struct MultiLines<'a>(&'a str);
+            impl fmt::Display for MultiLines<'_> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    writeln!(f)?;
+                    writeln!(f, "   +--")?;
+                    for line in self.0.lines() {
+                        writeln!(f, "   | {}", line)?;
+                    }
+                    write!(f, "   +--")
+                }
+            }
+            Ok(format!("{}", MultiLines(str)))
+        } else {
+            Ok(str.to_string())
         }
     }
 
@@ -144,16 +209,16 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize) {
         T::Bool => show(kv, width, |mut r| {
             r.read_bool().map(|b| if b { '√' } else { '×' })
         }),
-        T::String => show(kv, width, |mut r| r.read_str().map(str::to_string)),
+        T::String => show(kv, width, |mut r| show_str(&mut r)),
 
         T::Array => show(kv, width, |mut r| {
             let (ty, len) = r.read_arr_header()?;
             if len <= 8 {
                 fn show<'a, T: Display>(
-                    mut reader: GGmlReader<'a>,
+                    mut reader: GGufReader<'a>,
                     len: usize,
-                    mut f: impl FnMut(&mut GGmlReader<'a>) -> Result<T, GGmlReadError<'a>>,
-                ) -> Result<String, GGmlReadError<'a>> {
+                    mut f: impl FnMut(&mut GGufReader<'a>) -> Result<T, GGufReadError<'a>>,
+                ) -> Result<String, GGufReadError<'a>> {
                     let mut ans = String::from("[");
                     for i in 0..len {
                         if i > 0 {
@@ -176,7 +241,7 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize) {
                     T::F32 => show(r, len, |r| r.read::<f32>().map(|x| format!("{x:e}"))),
                     T::F64 => show(r, len, |r| r.read::<f64>().map(|x| format!("{x:e}"))),
                     T::Bool => show(r, len, |r| r.read_bool().map(|b| if b { '√' } else { '×' })),
-                    T::String => show(r, len, |r| r.read_str().map(str::to_string)),
+                    T::String => show(r, len, show_str),
                     T::Array => todo!(),
                 }
             } else {

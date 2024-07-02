@@ -13,7 +13,7 @@ pub use metadata::{
     utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs,
 };
 pub use name::GGufFileName;
-pub use reader::{GGmlReadError, GGmlReader};
+pub use reader::{GGufReadError, GGufReader};
 pub use tensor::{GGufTensorInfo, GGufTensors};
 pub use writer::GGufWriter;
 
