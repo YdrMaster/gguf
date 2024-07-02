@@ -1,8 +1,15 @@
 [package]
-name = "gguf-core"
+name = "ggus"
+description = "GGUF in Rust🦀"
 version = "0.0.0"
 edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
+repository = "https://github.com/YdrMaster/gguf"
+documentation = "https://docs.rs/ggus"
+license = "MIT"
+readme = "README.md"
+keywords = ["gguf", "ggml", "llama.cpp"]
+categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]
 memmap2 = "0.9"

@@ -9,5 +9,3 @@
 [![GitHub Pull Requests](https://img.shields.io/github/issues-pr/YdrMaster/gguf)](https://github.com/YdrMaster/gguf/pulls)
 ![GitHub contributors](https://img.shields.io/github/contributors/YdrMaster/gguf)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/YdrMaster/gguf)
-
-See the [Documentation](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md).
