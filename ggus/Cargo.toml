@@ -11,5 +11,4 @@ readme = "README.md"
 keywords = ["gguf", "ggml", "llama-cpp"]
 categories = ["parsing", "parser-implementations", "encoding"]
 
-[dependencies]
-memmap2 = "0.9"
+[dev-dependencies]

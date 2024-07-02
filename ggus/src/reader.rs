@@ -1,4 +1,4 @@
-﻿use crate::sizeof;
+﻿use crate::{sizeof, GGufMetaDataValueType};
 
 pub struct GGmlReader<'a> {
     data: &'a [u8],
@@ -54,5 +54,9 @@ impl<'a> GGmlReader<'a> {
         let tail = &self.data[self.cursor..];
         self.skip::<u8>(len)?;
         std::str::from_utf8(&tail[..len]).map_err(GGmlReadError::Utf8)
+    }
+
+    pub fn read_arr_header(&mut self) -> Result<(GGufMetaDataValueType, usize), GGmlReadError<'a>> {
+        Ok((self.read()?, self.read::<u64>()? as _))
     }
 }

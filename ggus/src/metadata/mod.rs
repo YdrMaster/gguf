@@ -105,10 +105,10 @@ impl<'a> GGufMetaKVPairs<'a> {
     }
 
     #[inline]
-    pub fn kvs<'s>(&'s self) -> impl Iterator<Item = MetaDataKV<'a>> + 's {
+    pub fn kvs<'s>(&'s self) -> impl Iterator<Item = GGufMetaKV<'a>> + 's {
         self.indices
             .iter()
-            .map(|(&key, &len)| MetaDataKV { key, len })
+            .map(|(&key, &len)| GGufMetaKV { key, len })
     }
 
     #[inline]
@@ -116,10 +116,10 @@ impl<'a> GGufMetaKVPairs<'a> {
         self.nbytes
     }
 
-    pub fn get(&self, key: impl AsRef<str>) -> Option<MetaDataKV<'a>> {
+    pub fn get(&self, key: impl AsRef<str>) -> Option<GGufMetaKV<'a>> {
         self.indices
             .get_key_value(key.as_ref())
-            .map(|(&key, &len)| MetaDataKV { key, len })
+            .map(|(&key, &len)| GGufMetaKV { key, len })
     }
 
     fn get_typed(
@@ -165,19 +165,18 @@ fn skip_value<'a>(
             Ok(())
         }
         Ty::Array => {
-            let ty = reader.read()?;
-            let len = reader.read::<u64>()?;
-            skip_value(ty, reader, len as _)
+            let (ty, len) = reader.read_arr_header()?;
+            skip_value(ty, reader, len)
         }
     }
 }
 
-pub struct MetaDataKV<'a> {
+pub struct GGufMetaKV<'a> {
     key: &'a str,
     len: usize,
 }
 
-impl<'a> MetaDataKV<'a> {
+impl<'a> GGufMetaKV<'a> {
     #[inline]
     pub fn key(&self) -> &'a str {
         self.key

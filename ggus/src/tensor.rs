@@ -76,8 +76,8 @@ impl<'a> GGufTensors<'a> {
     }
 
     #[inline]
-    pub fn iter<'s>(&'s self) -> impl Iterator<Item = TensorInfo<'a>> + 's {
-        self.indices.iter().map(|(name, _)| TensorInfo::new(name))
+    pub fn iter<'s>(&'s self) -> impl Iterator<Item = GGufTensorInfo<'a>> + 's {
+        self.indices.keys().map(|name| GGufTensorInfo::new(name))
     }
 
     #[inline]
@@ -85,25 +85,25 @@ impl<'a> GGufTensors<'a> {
         self.nbytes
     }
 
-    pub fn get(&self, name: &str) -> Option<TensorInfo<'a>> {
+    pub fn get(&self, name: &str) -> Option<GGufTensorInfo<'a>> {
         self.indices
             .get_key_value(name)
-            .map(|(name, ())| TensorInfo::new(name))
+            .map(|(name, ())| GGufTensorInfo::new(name))
     }
 }
 
 // | name::ptr | name::len | offset | ggml_type;ndim | shape ..
 #[repr(transparent)]
-pub struct TensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
+pub struct GGufTensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
 
-impl Drop for TensorInfo<'_> {
+impl Drop for GGufTensorInfo<'_> {
     #[inline]
     fn drop(&mut self) {
         unsafe { dealloc(self.0.as_ptr().cast(), layout(self.ndim())) }
     }
 }
 
-impl<'a> TensorInfo<'a> {
+impl<'a> GGufTensorInfo<'a> {
     fn new(name: &'a str) -> Self {
         unsafe {
             let ptr = name.as_ptr().add(name.len());

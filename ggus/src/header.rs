@@ -1,4 +1,7 @@
-﻿#[derive(Default, Debug)]
+﻿use crate::sizeof;
+use std::str::Utf8Error;
+
+#[derive(Default, Debug)]
 #[repr(C)]
 pub struct GGufFileHeader {
     pub magic: [u8; 4],
@@ -23,5 +26,15 @@ impl GGufFileHeader {
         } else {
             self.version == u32::from_be(self.version)
         }
+    }
+
+    #[inline]
+    pub const fn magic(&self) -> Result<&str, Utf8Error> {
+        std::str::from_utf8(&self.magic)
+    }
+
+    #[inline]
+    pub const fn nbytes(&self) -> usize {
+        sizeof!(Self)
     }
 }
