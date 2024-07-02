@@ -8,7 +8,7 @@ repository = "https://github.com/YdrMaster/gguf"
 documentation = "https://docs.rs/ggus"
 license = "MIT"
 readme = "README.md"
-keywords = ["gguf", "ggml", "llama.cpp"]
+keywords = ["gguf", "ggml", "llama-cpp"]
 categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]

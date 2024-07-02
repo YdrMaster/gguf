@@ -1,5 +1,3 @@
 ﻿[workspace]
-members = ["gguf-core"]
+members = ["ggus"]
 resolver = "2"
-
-[workspace.dependencies]
