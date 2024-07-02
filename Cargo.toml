@@ -1,8 +1,5 @@
-[package]
-name = "gguf"
-version = "0.1.0"
-edition = "2021"
-authors = ["YdrMaster <ydrml@hotmail.com>"]
+﻿[workspace]
+members = ["gguf-core"]
+resolver = "2"
 
-[dependencies]
-memmap2 = "0.9"
+[workspace.dependencies]
