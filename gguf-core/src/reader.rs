@@ -35,10 +35,18 @@ impl<'a> GGmlReader<'a> {
         }
     }
 
-    pub fn read<U: Copy>(&mut self) -> Result<U, GGmlReadError<'a>> {
+    pub fn read<U: Copy + 'static>(&mut self) -> Result<U, GGmlReadError<'a>> {
         let ptr = self.data[self.cursor..].as_ptr().cast::<U>();
         self.skip::<U>(1)?;
         Ok(unsafe { ptr.read_unaligned() })
+    }
+
+    pub fn read_bool(&mut self) -> Result<bool, GGmlReadError<'a>> {
+        match self.read::<u8>()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            e => Err(GGmlReadError::Bool(e)),
+        }
     }
 
     pub fn read_str(&mut self) -> Result<&'a str, GGmlReadError<'a>> {

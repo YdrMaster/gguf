@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod header;
 mod metadata;
 mod name;
@@ -5,7 +7,7 @@ mod reader;
 mod tensor;
 
 pub use header::GGufFileHeader;
-pub use metadata::{GGufFileType, GGufMetaDataValueType, GGufMetaKVPairs};
+pub use metadata::{utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKVPairs};
 pub use name::GGufFileName;
 pub use tensor::GGufTensors;
 

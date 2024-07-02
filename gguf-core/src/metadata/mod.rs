@@ -1,8 +1,16 @@
-﻿use crate::{
+﻿//! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
+
+mod general;
+mod llm;
+mod tokenizer;
+
+use crate::{
     reader::{GGmlReadError, GGmlReader},
     sizeof,
 };
 use std::{collections::HashMap, slice::from_raw_parts};
+
+pub use tokenizer::{utok, GGufArray};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
@@ -25,13 +33,13 @@ pub enum GGufMetaDataValueType {
     ///
     /// 1-byte value where 0 is false and 1 is true.
     /// Anything else is invalid, and should be treated as either the model being invalid or the reader being buggy.
-    BOOL = 7,
+    Bool = 7,
     /// The value is a UTF-8 non-null-terminated string, with length prepended.
-    STRING = 8,
+    String = 8,
     /// The value is an array of other values, with the length and type prepended.
     ///
     /// Arrays can be nested, and the length of the array is the number of elements in the array, not the number of bytes.
-    ARRAY = 9,
+    Array = 9,
     /// The value is a 64-bit unsigned little-endian integer.
     U64 = 10,
     /// The value is a 64-bit signed little-endian integer.
@@ -107,83 +115,11 @@ impl<'a> GGufMetaKVPairs<'a> {
             .map(|(&key, &len)| MetaDataKV { key, len })
     }
 
-    pub fn architecture(&self) -> &'a str {
-        self.get_typed("general.architecture", GGufMetaDataValueType::STRING)
-            .expect("required key `general.architecture` not exist")
-            .read_str()
-            .unwrap()
-    }
-
-    pub fn quantization_version(&self) -> u32 {
-        self.get_typed("general.quantization_version", GGufMetaDataValueType::U32)
-            .expect("required key `general.quantization_version` not exist")
-            .read()
-            .unwrap()
-    }
-
-    #[inline]
-    pub fn alignment(&self) -> usize {
-        self.get_typed("general.alignment", GGufMetaDataValueType::U32)
-            .map_or(32, |mut reader| reader.read::<u32>().unwrap() as _)
-    }
-
-    #[inline]
-    pub fn name(&self) -> Option<&'a str> {
-        self.get_typed("general.name", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn author(&self) -> Option<&'a str> {
-        self.get_typed("general.author", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn url(&self) -> Option<&'a str> {
-        self.get_typed("general.url", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn description(&self) -> Option<&'a str> {
-        self.get_typed("general.description", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn license(&self) -> Option<&'a str> {
-        self.get_typed("general.license", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn file_type(&self) -> Option<GGufFileType> {
-        self.get_typed("general.license", GGufMetaDataValueType::U32)
-            .map(|mut reader| {
-                let val = reader.read::<u32>().unwrap();
-                assert!(val <= GGufFileType::MostlyQ6K as _);
-                unsafe { std::mem::transmute(val) }
-            })
-    }
-
-    #[inline]
-    pub fn source_url(&self) -> Option<&'a str> {
-        self.get_typed("general.source.url", GGufMetaDataValueType::STRING)
-            .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    pub fn source_hf_repo(&self) -> Option<&'a str> {
-        self.get_typed(
-            "general.source.huggingface.repository",
-            GGufMetaDataValueType::STRING,
-        )
-        .map(|mut reader| reader.read_str().unwrap())
-    }
-
-    #[inline]
-    fn get_typed(&self, name: &str, ty: GGufMetaDataValueType) -> Option<GGmlReader<'a>> {
+    fn get_typed(
+        &self,
+        name: impl AsRef<str>,
+        ty: GGufMetaDataValueType,
+    ) -> Option<GGmlReader<'a>> {
         self.get(name).map(|kv| {
             assert_eq!(kv.ty(), ty);
             kv.value_reader()
@@ -209,22 +145,19 @@ fn skip_value<'a>(
         Ty::I64 => reader.skip::<i64>(len),
         Ty::F64 => reader.skip::<f64>(len),
 
-        Ty::BOOL => {
+        Ty::Bool => {
             for _ in 0..len {
-                match reader.read::<u8>()? {
-                    0 | 1 => {}
-                    e => Err(GGmlReadError::Bool(e))?,
-                }
+                reader.read_bool()?;
             }
             Ok(())
         }
-        Ty::STRING => {
+        Ty::String => {
             for _ in 0..len {
                 reader.read_str()?;
             }
             Ok(())
         }
-        Ty::ARRAY => {
+        Ty::Array => {
             let ty = reader.read()?;
             let len = reader.read::<u64>()?;
             skip_value(ty, reader, len as _)
