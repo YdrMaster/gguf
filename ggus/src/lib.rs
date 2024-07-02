@@ -6,11 +6,14 @@ mod metadata;
 mod name;
 mod reader;
 mod tensor;
+mod writer;
 
 pub use header::GGufFileHeader;
 pub use metadata::{utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKVPairs};
 pub use name::GGufFileName;
+pub use reader::{GGmlReadError, GGmlReader};
 pub use tensor::GGufTensors;
+pub use writer::GGufWriter;
 
 #[test]
 fn test_read() {
@@ -26,12 +29,12 @@ fn test_read() {
     let header = unsafe { file.as_ptr().cast::<GGufFileHeader>().read() };
     assert!(header.is_magic_correct());
     assert!(header.is_native_endian());
-    assert!(header.version() == 3);
+    assert!(header.version == 3);
     println!("{header:?}");
     println!();
 
     let cursor = sizeof!(GGufFileHeader);
-    let pairs = GGufMetaKVPairs::scan(header.metadata_kv_count(), &file[cursor..]).unwrap();
+    let pairs = GGufMetaKVPairs::scan(header.metadata_kv_count, &file[cursor..]).unwrap();
     println!(
         "{}: quant ver {}, align {}",
         pairs.architecture(),
@@ -44,7 +47,7 @@ fn test_read() {
     println!();
 
     let cursor = cursor + pairs.nbytes();
-    let tensors = GGufTensors::scan(header.tensor_count(), &file[cursor..]).unwrap();
+    let tensors = GGufTensors::scan(header.tensor_count, &file[cursor..]).unwrap();
     for name in tensors.names() {
         let tensor = tensors.get(name).unwrap();
         println!(

@@ -36,9 +36,9 @@ macro_rules! get {
     };
 }
 
-pub struct GGufArray<'a, U: ?Sized>(GGmlReader<'a>, u64, PhantomData<U>);
+pub struct GGufArray<'a, T: ?Sized>(GGmlReader<'a>, u64, PhantomData<T>);
 
-impl<'a, U: ?Sized> GGufArray<'a, U> {
+impl<'a, T: ?Sized> GGufArray<'a, T> {
     pub fn new_typed(mut reader: GGmlReader<'a>, ty: GGufMetaDataValueType) -> Self {
         assert_eq!(reader.read::<GGufMetaDataValueType>(), Ok(ty));
         let len = reader.read().unwrap();
@@ -67,13 +67,13 @@ impl<'a> GGufArray<'a, str> {
     }
 }
 
-impl<'a, U: Copy + 'static> Iterator for GGufArray<'a, U> {
-    type Item = U;
+impl<'a, T: Copy> Iterator for GGufArray<'a, T> {
+    type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.1 > 0 {
             self.1 -= 1;
-            Some(self.0.read::<U>().unwrap())
+            Some(self.0.read::<T>().unwrap())
         } else {
             None
         }

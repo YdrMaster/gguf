@@ -8,11 +8,10 @@ impl<'a> GGufMetaKVPairs<'a> {
             .unwrap()
     }
 
+    #[inline]
     pub fn quantization_version(&self) -> u32 {
         self.get_typed("general.quantization_version", Ty::U32)
-            .expect("required key `general.quantization_version` not exist")
-            .read()
-            .unwrap()
+            .map_or(0, |mut reader| reader.read().unwrap())
     }
 
     #[inline]

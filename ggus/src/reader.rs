@@ -24,8 +24,8 @@ impl<'a> GGmlReader<'a> {
         self.cursor
     }
 
-    pub(crate) fn skip<U: Copy>(&mut self, len: usize) -> Result<(), GGmlReadError<'a>> {
-        let len = len * sizeof!(U);
+    pub(crate) fn skip<T: Copy>(&mut self, len: usize) -> Result<(), GGmlReadError<'a>> {
+        let len = len * sizeof!(T);
         let data = &self.data[self.cursor..];
         if data.len() >= len {
             self.cursor += len;
@@ -35,9 +35,9 @@ impl<'a> GGmlReader<'a> {
         }
     }
 
-    pub fn read<U: Copy + 'static>(&mut self) -> Result<U, GGmlReadError<'a>> {
-        let ptr = self.data[self.cursor..].as_ptr().cast::<U>();
-        self.skip::<U>(1)?;
+    pub fn read<T: Copy>(&mut self) -> Result<T, GGmlReadError<'a>> {
+        let ptr = self.data[self.cursor..].as_ptr().cast::<T>();
+        self.skip::<T>(1)?;
         Ok(unsafe { ptr.read_unaligned() })
     }
 

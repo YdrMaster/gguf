@@ -49,9 +49,9 @@ pub struct GGufTensors<'a> {
 }
 
 impl<'a> GGufTensors<'a> {
-    pub fn scan(count: usize, data: &'a [u8]) -> Result<Self, GGmlReadError<'a>> {
+    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGmlReadError<'a>> {
         let mut reader = GGmlReader::new(data);
-        let mut indices = HashMap::with_capacity(count);
+        let mut indices = HashMap::with_capacity(count as _);
         for _ in 0..count {
             let name = reader.read_str()?;
             let ndim = reader.read::<u32>()? as usize;
