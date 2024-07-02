@@ -66,6 +66,7 @@ pub enum GGufFileType {
     MostlyQ6K = 18,
 }
 
+#[derive(Clone, Debug)]
 pub struct GGufMetaKVPairs<'a> {
     indices: HashMap<&'a str, usize>,
     nbytes: usize,
@@ -79,7 +80,7 @@ impl<'a> GGufMetaKVPairs<'a> {
             let key = reader.read_str()?;
             let ty = reader.read()?;
             let begin = reader.cursor();
-            skip_value(ty, &mut reader)?;
+            skip_value(ty, &mut reader, 1)?;
             if indices.insert(key, reader.cursor() - begin).is_some() {
                 return Err(GGmlReadError::DuplicatedKey(key));
             }
@@ -193,32 +194,41 @@ impl<'a> GGufMetaKVPairs<'a> {
 fn skip_value<'a>(
     ty: GGufMetaDataValueType,
     reader: &mut GGmlReader<'a>,
+    len: usize,
 ) -> Result<(), GGmlReadError<'a>> {
     use GGufMetaDataValueType as Ty;
     match ty {
-        Ty::U8 => reader.skip::<u8>(1),
-        Ty::I8 => reader.skip::<i8>(1),
-        Ty::U16 => reader.skip::<u16>(1),
-        Ty::I16 => reader.skip::<i16>(1),
-        Ty::U32 => reader.skip::<u32>(1),
-        Ty::I32 => reader.skip::<i32>(1),
-        Ty::F32 => reader.skip::<f32>(1),
-        Ty::BOOL => match reader.read::<u8>()? {
-            0 | 1 => Ok(()),
-            e => Err(GGmlReadError::Bool(e)),
-        },
-        Ty::STRING => reader.read_str().map(drop),
-        Ty::ARRAY => {
-            let ty = reader.read()?;
-            let len = reader.read::<u64>()?;
+        Ty::U8 => reader.skip::<u8>(len),
+        Ty::I8 => reader.skip::<i8>(len),
+        Ty::U16 => reader.skip::<u16>(len),
+        Ty::I16 => reader.skip::<i16>(len),
+        Ty::U32 => reader.skip::<u32>(len),
+        Ty::I32 => reader.skip::<i32>(len),
+        Ty::F32 => reader.skip::<f32>(len),
+        Ty::U64 => reader.skip::<u64>(len),
+        Ty::I64 => reader.skip::<i64>(len),
+        Ty::F64 => reader.skip::<f64>(len),
+
+        Ty::BOOL => {
             for _ in 0..len {
-                skip_value(ty, reader)?;
+                match reader.read::<u8>()? {
+                    0 | 1 => {}
+                    e => Err(GGmlReadError::Bool(e))?,
+                }
             }
             Ok(())
         }
-        Ty::U64 => reader.skip::<u64>(1),
-        Ty::I64 => reader.skip::<i64>(1),
-        Ty::F64 => reader.skip::<f64>(1),
+        Ty::STRING => {
+            for _ in 0..len {
+                reader.read_str()?;
+            }
+            Ok(())
+        }
+        Ty::ARRAY => {
+            let ty = reader.read()?;
+            let len = reader.read::<u64>()?;
+            skip_value(ty, reader, len as _)
+        }
     }
 }
 

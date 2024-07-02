@@ -10,7 +10,7 @@ pub use name::GGufFileName;
 pub use tensor::GGufTensors;
 
 #[test]
-fn test_gguf() {
+fn test_read() {
     use std::fs::File;
 
     let Some(args) = std::option_env!("ARGS") else {

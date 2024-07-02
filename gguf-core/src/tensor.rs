@@ -42,6 +42,7 @@ pub enum GGmlType {
     IQ1M = 29,
 }
 
+#[derive(Clone, Debug)]
 pub struct GGufTensors<'a> {
     indices: HashMap<&'a str, ()>,
     nbytes: usize,
