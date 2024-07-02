@@ -76,12 +76,36 @@ impl<'a> GGufTensors<'a> {
     }
 
     #[inline]
+    pub fn iter<'s>(&'s self) -> impl Iterator<Item = TensorInfo<'a>> + 's {
+        self.indices.iter().map(|(name, _)| TensorInfo::new(name))
+    }
+
+    #[inline]
     pub const fn nbytes(&self) -> usize {
         self.nbytes
     }
 
     pub fn get(&self, name: &str) -> Option<TensorInfo<'a>> {
-        self.indices.get_key_value(name).map(|(name, ())| unsafe {
+        self.indices
+            .get_key_value(name)
+            .map(|(name, ())| TensorInfo::new(name))
+    }
+}
+
+// | name::ptr | name::len | offset | ggml_type;ndim | shape ..
+#[repr(transparent)]
+pub struct TensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
+
+impl Drop for TensorInfo<'_> {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe { dealloc(self.0.as_ptr().cast(), layout(self.ndim())) }
+    }
+}
+
+impl<'a> TensorInfo<'a> {
+    fn new(name: &'a str) -> Self {
+        unsafe {
             let ptr = name.as_ptr().add(name.len());
             let ndim = ptr.cast::<u32>().read_unaligned() as usize;
 
@@ -101,23 +125,10 @@ impl<'a> GGufTensors<'a> {
             body.add(3).cast::<GGmlType>().write(ggml_type);
             body.add(3).cast::<u32>().add(1).write(ndim as _);
             copy_nonoverlapping(shape, body.add(4).cast(), ndim * sizeof!(u64));
-            TensorInfo(NonNull::new_unchecked(body), PhantomData)
-        })
+            Self(NonNull::new_unchecked(body), PhantomData)
+        }
     }
-}
 
-// | name::ptr | name::len | offset | ggml_type;ndim | shape ..
-#[repr(transparent)]
-pub struct TensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
-
-impl Drop for TensorInfo<'_> {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe { dealloc(self.0.as_ptr().cast(), layout(self.ndim())) }
-    }
-}
-
-impl<'a> TensorInfo<'a> {
     #[inline]
     pub fn name(&self) -> &'a str {
         unsafe {

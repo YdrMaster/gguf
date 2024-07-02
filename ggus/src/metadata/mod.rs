@@ -105,6 +105,13 @@ impl<'a> GGufMetaKVPairs<'a> {
     }
 
     #[inline]
+    pub fn kvs<'s>(&'s self) -> impl Iterator<Item = MetaDataKV<'a>> + 's {
+        self.indices
+            .iter()
+            .map(|(&key, &len)| MetaDataKV { key, len })
+    }
+
+    #[inline]
     pub const fn nbytes(&self) -> usize {
         self.nbytes
     }

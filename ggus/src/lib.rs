@@ -35,15 +35,14 @@ fn test_read() {
 
     let cursor = sizeof!(GGufFileHeader);
     let pairs = GGufMetaKVPairs::scan(header.metadata_kv_count, &file[cursor..]).unwrap();
-    for key in pairs.keys() {
-        println!("{key}");
+    for kv in pairs.kvs() {
+        println!("{}: {:?}", kv.key(), kv.ty());
     }
     println!();
 
     let cursor = cursor + pairs.nbytes();
     let tensors = GGufTensors::scan(header.tensor_count, &file[cursor..]).unwrap();
-    for name in tensors.names() {
-        let tensor = tensors.get(name).unwrap();
+    for tensor in tensors.iter() {
         println!(
             "{}:\t{:?}\t+{:#x}\t{:?}",
             tensor.name(),
