@@ -35,14 +35,8 @@ fn test_read() {
 
     let cursor = sizeof!(GGufFileHeader);
     let pairs = GGufMetaKVPairs::scan(header.metadata_kv_count, &file[cursor..]).unwrap();
-    println!(
-        "{}: quant ver {}, align {}",
-        pairs.architecture(),
-        pairs.quantization_version(),
-        pairs.alignment()
-    );
     for key in pairs.keys() {
-        println!("  {key}");
+        println!("{key}");
     }
     println!();
 

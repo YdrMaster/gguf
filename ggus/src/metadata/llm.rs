@@ -1,12 +1,12 @@
 ﻿use super::{GGufMetaDataValueType, GGufMetaKVPairs};
 
-#[repr(transparent)]
-pub struct LlmMeta<'a>(GGufMetaKVPairs<'a>);
+pub struct LlmMeta<'a>(GGufMetaKVPairs<'a>, &'a str);
 
 impl<'a> GGufMetaKVPairs<'a> {
     #[inline]
-    pub const fn llm(self) -> LlmMeta<'a> {
-        LlmMeta(self)
+    pub fn llm(self, arch: Option<&'a str>) -> LlmMeta<'a> {
+        let arch = arch.or_else(|| self.architecture()).unwrap();
+        LlmMeta(self, arch)
     }
 }
 
@@ -19,7 +19,7 @@ impl<'a> LlmMeta<'a> {
 
 macro_rules! get {
     ($self:expr, $key:literal @ $ty:ident) => {
-        $self.0.get_typed(format!("{}.{}", $self.0.architecture(), $key), GGufMetaDataValueType::$ty)
+        $self.0.get_typed(format!("{}.{}", $self.1, $key), GGufMetaDataValueType::$ty)
     };
 
     ($self:expr, $key:literal(u32)) => {

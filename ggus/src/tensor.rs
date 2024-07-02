@@ -5,8 +5,10 @@
 use std::{
     alloc::{alloc, dealloc, Layout},
     collections::HashMap,
-    ptr::NonNull,
+    marker::PhantomData,
+    ptr::{copy_nonoverlapping, NonNull},
     slice::from_raw_parts,
+    str::from_utf8_unchecked,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -82,68 +84,71 @@ impl<'a> GGufTensors<'a> {
         self.indices.get_key_value(name).map(|(name, ())| unsafe {
             let ptr = name.as_ptr().add(name.len());
             let ndim = ptr.cast::<u32>().read_unaligned() as usize;
-            let layout = body_layout(ndim);
-            let body = alloc(layout).cast::<u64>();
-            body.cast::<u32>().write(ndim as _);
 
             let ptr = ptr.add(sizeof!(u32));
-            std::ptr::copy_nonoverlapping(ptr, body.add(2).cast(), ndim * sizeof!(u64));
+            let shape = ptr;
 
             let ptr = ptr.add(ndim * sizeof!(u64));
-            std::ptr::copy_nonoverlapping(ptr, body.cast::<u32>().add(1).cast(), sizeof!(u32));
+            let ggml_type = ptr.cast::<GGmlType>().read_unaligned();
 
             let ptr = ptr.add(sizeof!(u32));
-            std::ptr::copy_nonoverlapping(ptr, body.add(1).cast(), sizeof!(u64));
+            let offset = ptr.cast::<u64>().read_unaligned();
 
-            TensorInfo {
-                name,
-                body: NonNull::new_unchecked(body),
-            }
+            let body = alloc(layout(ndim)).cast::<u64>();
+            body.write(name.as_ptr() as _);
+            body.add(1).write(name.len() as _);
+            body.add(2).write(offset);
+            body.add(3).cast::<GGmlType>().write(ggml_type);
+            body.add(3).cast::<u32>().add(1).write(ndim as _);
+            copy_nonoverlapping(shape, body.add(4).cast(), ndim * sizeof!(u64));
+            TensorInfo(NonNull::new_unchecked(body), PhantomData)
         })
     }
 }
 
-pub struct TensorInfo<'a> {
-    name: &'a str,
-    body: NonNull<u64>,
-}
+// | name::ptr | name::len | offset | ggml_type;ndim | shape ..
+#[repr(transparent)]
+pub struct TensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
 
 impl Drop for TensorInfo<'_> {
     #[inline]
     fn drop(&mut self) {
-        let layout = body_layout(self.ndim());
-        unsafe { dealloc(self.body.as_ptr().cast(), layout) };
+        unsafe { dealloc(self.0.as_ptr().cast(), layout(self.ndim())) }
     }
 }
 
 impl<'a> TensorInfo<'a> {
     #[inline]
-    pub const fn name(&self) -> &'a str {
-        self.name
+    pub fn name(&self) -> &'a str {
+        unsafe {
+            let ptr = self.0.as_ptr().read();
+            let len = self.0.as_ptr().add(1).read();
+            from_utf8_unchecked(from_raw_parts(ptr as _, len as _))
+        }
     }
 
     #[inline]
     fn ndim(&self) -> usize {
-        unsafe { *self.body.cast::<u32>().as_ptr() as _ }
+        unsafe { self.0.as_ptr().add(3).cast::<u32>().add(1).read() as _ }
     }
 
     #[inline]
     pub fn shape(&self) -> &[u64] {
-        unsafe { from_raw_parts(self.body.as_ptr().add(2), self.ndim()) }
+        unsafe { from_raw_parts(self.0.as_ptr().add(4), self.ndim()) }
     }
 
     #[inline]
     pub fn ggml_type(&self) -> GGmlType {
-        unsafe { *self.body.cast::<GGmlType>().as_ptr().add(1) }
+        unsafe { self.0.as_ptr().add(3).cast::<GGmlType>().read() }
     }
 
     #[inline]
     pub fn offset(&self) -> usize {
-        unsafe { *self.body.as_ptr().add(1) as _ }
+        unsafe { self.0.as_ptr().add(2).read() as _ }
     }
 }
 
 #[inline(always)]
-fn body_layout(ndim: usize) -> Layout {
-    Layout::array::<u64>(ndim + 2).unwrap()
+fn layout(ndim: usize) -> Layout {
+    Layout::array::<u64>(4 + ndim).unwrap()
 }

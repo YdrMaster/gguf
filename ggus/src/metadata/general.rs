@@ -1,17 +1,15 @@
 ﻿use super::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaKVPairs};
 
 impl<'a> GGufMetaKVPairs<'a> {
-    pub fn architecture(&self) -> &'a str {
+    pub fn architecture(&self) -> Option<&'a str> {
         self.get_typed("general.architecture", Ty::String)
-            .expect("required key `general.architecture` not exist")
-            .read_str()
-            .unwrap()
+            .map(|mut reader| reader.read_str().unwrap())
     }
 
     #[inline]
-    pub fn quantization_version(&self) -> u32 {
+    pub fn quantization_version(&self) -> Option<u32> {
         self.get_typed("general.quantization_version", Ty::U32)
-            .map_or(0, |mut reader| reader.read().unwrap())
+            .map(|mut reader| reader.read().unwrap())
     }
 
     #[inline]
