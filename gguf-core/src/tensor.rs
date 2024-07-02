@@ -9,7 +9,7 @@ use std::{
     slice::from_raw_parts,
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
 pub enum GGmlType {
     F32 = 0,

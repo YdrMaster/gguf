@@ -4,7 +4,7 @@
 };
 use std::{collections::HashMap, slice::from_raw_parts};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
 pub enum GGufMetaDataValueType {
     /// The value is a 8-bit unsigned integer.
@@ -38,6 +38,32 @@ pub enum GGufMetaDataValueType {
     I64 = 11,
     /// The value is a 64-bit IEEE754 floating point number.
     F64 = 12,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(u32)]
+pub enum GGufFileType {
+    AllF32 = 0,
+    MostlyF16 = 1,
+    MostlyQ4_0 = 2,
+    MostlyQ4_1 = 3,
+    MostlyQ4_1SomeF16 = 4,
+    #[deprecated = "support removed"]
+    MostlyQ4_2 = 5,
+    #[deprecated = "support removed"]
+    MostlyQ4_3 = 6,
+    MostlyQ8_0 = 7,
+    MostlyQ5_0 = 8,
+    MostlyQ51 = 9,
+    MostlyQ2K = 10,
+    MostlyQ3KS = 11,
+    MostlyQ3KM = 12,
+    MostlyQ3KL = 13,
+    MostlyQ4KS = 14,
+    MostlyQ4KM = 15,
+    MostlyQ5KS = 16,
+    MostlyQ5KM = 17,
+    MostlyQ6K = 18,
 }
 
 pub struct GGufMetaKVPairs<'a> {
@@ -74,11 +100,93 @@ impl<'a> GGufMetaKVPairs<'a> {
         self.nbytes
     }
 
-    #[inline]
-    pub fn get(&self, key: &str) -> Option<MetaDataKV<'a>> {
+    pub fn get(&self, key: impl AsRef<str>) -> Option<MetaDataKV<'a>> {
         self.indices
-            .get_key_value(key)
+            .get_key_value(key.as_ref())
             .map(|(&key, &len)| MetaDataKV { key, len })
+    }
+
+    pub fn architecture(&self) -> &'a str {
+        self.get_typed("general.architecture", GGufMetaDataValueType::STRING)
+            .expect("required key `general.architecture` not exist")
+            .read_str()
+            .unwrap()
+    }
+
+    pub fn quantization_version(&self) -> u32 {
+        self.get_typed("general.quantization_version", GGufMetaDataValueType::U32)
+            .expect("required key `general.quantization_version` not exist")
+            .read()
+            .unwrap()
+    }
+
+    #[inline]
+    pub fn alignment(&self) -> usize {
+        self.get_typed("general.alignment", GGufMetaDataValueType::U32)
+            .map_or(32, |mut reader| reader.read::<u32>().unwrap() as _)
+    }
+
+    #[inline]
+    pub fn name(&self) -> Option<&'a str> {
+        self.get_typed("general.name", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn author(&self) -> Option<&'a str> {
+        self.get_typed("general.author", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn url(&self) -> Option<&'a str> {
+        self.get_typed("general.url", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn description(&self) -> Option<&'a str> {
+        self.get_typed("general.description", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn license(&self) -> Option<&'a str> {
+        self.get_typed("general.license", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn file_type(&self) -> Option<GGufFileType> {
+        self.get_typed("general.license", GGufMetaDataValueType::U32)
+            .map(|mut reader| {
+                let val = reader.read::<u32>().unwrap();
+                assert!(val <= GGufFileType::MostlyQ6K as _);
+                unsafe { std::mem::transmute(val) }
+            })
+    }
+
+    #[inline]
+    pub fn source_url(&self) -> Option<&'a str> {
+        self.get_typed("general.source.url", GGufMetaDataValueType::STRING)
+            .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    pub fn source_hf_repo(&self) -> Option<&'a str> {
+        self.get_typed(
+            "general.source.huggingface.repository",
+            GGufMetaDataValueType::STRING,
+        )
+        .map(|mut reader| reader.read_str().unwrap())
+    }
+
+    #[inline]
+    fn get_typed(&self, name: &str, ty: GGufMetaDataValueType) -> Option<GGmlReader<'a>> {
+        self.get(name).map(|kv| {
+            assert_eq!(kv.ty(), ty);
+            kv.value_reader()
+        })
     }
 }
 

@@ -5,7 +5,7 @@ mod reader;
 mod tensor;
 
 pub use header::GGufFileHeader;
-pub use metadata::{GGufMetaDataValueType, GGufMetaKVPairs};
+pub use metadata::{GGufFileType, GGufMetaDataValueType, GGufMetaKVPairs};
 pub use name::GGufFileName;
 pub use tensor::GGufTensors;
 
@@ -25,12 +25,20 @@ fn test_gguf() {
     assert!(header.is_native_endian());
     assert!(header.version() == 3);
     println!("{header:?}");
+    println!();
 
     let cursor = sizeof!(GGufFileHeader);
     let pairs = GGufMetaKVPairs::scan(header.metadata_kv_count(), &file[cursor..]).unwrap();
+    println!(
+        "{}: quant ver {}, align {}",
+        pairs.architecture(),
+        pairs.quantization_version(),
+        pairs.alignment()
+    );
     for key in pairs.keys() {
-        println!("{key}");
+        println!("  {key}");
     }
+    println!();
 
     let cursor = cursor + pairs.nbytes();
     let tensors = GGufTensors::scan(header.tensor_count(), &file[cursor..]).unwrap();
