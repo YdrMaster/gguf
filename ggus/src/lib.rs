@@ -11,10 +11,11 @@ mod writer;
 pub use header::GGufFileHeader;
 pub use metadata::{
     utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs,
+    GGufTokenType,
 };
 pub use name::GGufFileName;
 pub use reader::{GGufReadError, GGufReader};
-pub use tensor::{GGufTensorInfo, GGufTensors};
+pub use tensor::{GGmlType, GGufTensorInfo, GGufTensors};
 pub use writer::GGufWriter;
 
 macro_rules! sizeof {

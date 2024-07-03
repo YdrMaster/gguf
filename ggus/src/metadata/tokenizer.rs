@@ -5,9 +5,6 @@ use std::marker::PhantomData;
 #[repr(transparent)]
 pub struct TokenizerMeta<'a>(GGufMetaKVPairs<'a>);
 
-#[allow(non_camel_case_types)]
-pub type utok = u32;
-
 impl<'a> GGufMetaKVPairs<'a> {
     #[inline]
     pub const fn tokenizer(self) -> TokenizerMeta<'a> {
@@ -20,6 +17,20 @@ impl<'a> TokenizerMeta<'a> {
     pub fn all(self) -> GGufMetaKVPairs<'a> {
         self.0
     }
+}
+
+#[allow(non_camel_case_types)]
+pub type utok = u32;
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum GGufTokenType {
+    Normal = 1,
+    Unknown = 2,
+    Control = 3,
+    UserDefined = 4,
+    Unused = 5,
+    Byte = 6,
 }
 
 macro_rules! get {
@@ -46,7 +57,7 @@ impl<'a, T: ?Sized> GGufArray<'a, T> {
     }
 }
 
-impl<'a> GGufArray<'a, i32> {
+impl<'a> GGufArray<'a, GGufTokenType> {
     #[inline]
     pub fn new(reader: GGufReader<'a>) -> Self {
         Self::new_typed(reader, GGufMetaDataValueType::I32)
@@ -110,8 +121,8 @@ impl<'a> TokenizerMeta<'a> {
     }
 
     #[inline]
-    pub fn token_type(&self) -> Option<GGufArray<'a, i32>> {
-        get!(self, "token_type" @ Array).map(GGufArray::<i32>::new)
+    pub fn token_type(&self) -> Option<GGufArray<'a, GGufTokenType>> {
+        get!(self, "token_type" @ Array).map(GGufArray::<GGufTokenType>::new)
     }
 
     #[inline]

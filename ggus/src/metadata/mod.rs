@@ -11,7 +11,7 @@ use crate::{
 use indexmap::IndexMap;
 use std::{hash::Hash, slice::from_raw_parts};
 
-pub use tokenizer::{utok, GGufArray};
+pub use tokenizer::{utok, GGufArray, GGufTokenType};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
