@@ -12,6 +12,12 @@ pub struct ShowArgs {
     shards: bool,
 }
 
+const YES: &str = "✔️  ";
+const ERR: &str = "❌  ";
+fn exit() -> ! {
+    std::process::exit(1)
+}
+
 impl ShowArgs {
     pub fn show(self) {
         if self.file.is_file() {
@@ -74,12 +80,6 @@ fn show(file: &[u8]) {
     let cursor = cursor + kvs.nbytes();
     let tensors = GGufTensors::scan(header.tensor_count, &file[cursor..]).unwrap();
     show_tensors(&tensors);
-}
-
-const YES: &str = "✔️  ";
-const ERR: &str = "❌  ";
-fn exit() -> ! {
-    std::process::exit(1)
 }
 
 fn show_title(title: &str) {
@@ -174,6 +174,28 @@ fn fmt_meta_val<'a>(
     len: usize,
     buf: &mut String,
 ) -> Result<(), GGufReadError<'a>> {
+    struct MultiLines<'a>(&'a str);
+    impl fmt::Display for MultiLines<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            writeln!(f)?;
+            writeln!(f, "   +--")?;
+            for line in self.0.lines() {
+                writeln!(f, "   | {}", line)?;
+            }
+            write!(f, "   +--")
+        }
+    }
+
+    fn fmt_exp(e: f32) -> String {
+        if e == 0. {
+            String::from("0")
+        } else if e.abs().log10().abs() > 3. {
+            format!("{e:e}")
+        } else {
+            format!("{e}")
+        }
+    }
+
     match len {
         0 => buf.push_str("[]"),
         1 => {
@@ -187,23 +209,12 @@ fn fmt_meta_val<'a>(
                 T::I32 => buf.push_str(&reader.read::<i32>()?.to_string()),
                 T::U64 => buf.push_str(&reader.read::<u64>()?.to_string()),
                 T::I64 => buf.push_str(&reader.read::<i64>()?.to_string()),
-                T::F32 => buf.push_str(&reader.read::<f32>()?.to_string()),
-                T::F64 => buf.push_str(&reader.read::<f64>()?.to_string()),
+                T::F32 => buf.push_str(&fmt_exp(reader.read::<f32>()?)),
+                T::F64 => buf.push_str(&fmt_exp(reader.read::<f64>()? as _)),
                 T::Bool => buf.push(if reader.read()? { '√' } else { '×' }),
                 T::String => {
                     let str = reader.read_str()?;
                     if str.lines().nth(1).is_some() {
-                        struct MultiLines<'a>(&'a str);
-                        impl fmt::Display for MultiLines<'_> {
-                            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                                writeln!(f)?;
-                                writeln!(f, "   +--")?;
-                                for line in self.0.lines() {
-                                    writeln!(f, "   | {}", line)?;
-                                }
-                                write!(f, "   +--")
-                            }
-                        }
                         buf.push_str(&format!("{}", MultiLines(str)));
                     } else {
                         buf.push_str(&format!("`{str}`"));
