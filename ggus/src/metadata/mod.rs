@@ -190,7 +190,7 @@ pub struct GGufMetaKV<'a> {
 impl PartialEq for GGufMetaKV<'_> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
-        self.key.as_ptr() == other.key.as_ptr()
+        self.key == other.key
     }
 }
 
@@ -199,7 +199,7 @@ impl Eq for GGufMetaKV<'_> {}
 impl Hash for GGufMetaKV<'_> {
     #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.key.as_ptr().hash(state)
+        self.key.hash(state)
     }
 }
 

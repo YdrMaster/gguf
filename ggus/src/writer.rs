@@ -1,39 +1,46 @@
-﻿use crate::{sizeof, GGufFileHeader, GGufMetaDataValueType};
+﻿use crate::{sizeof, tensor::GGmlType, GGufFileHeader, GGufMetaDataValueType};
 use std::{
     io::{BufWriter, Result, Write},
+    mem::size_of_val,
     slice::from_raw_parts,
 };
 
-pub struct GGufWriter<T: Write>(BufWriter<T>);
+pub struct GGufWriter<T: Write>(BufWriter<T>, usize);
 
 impl<T: Write> GGufWriter<T> {
     #[inline]
     pub fn new(writer: T, header: GGufFileHeader) -> Result<Self> {
         let mut buf = BufWriter::new(writer);
         buf.write_all(as_slice(&header))?;
-        Ok(Self(buf))
+        Ok(Self(buf, 0))
     }
 
     #[inline]
-    pub fn write_bytes(&mut self, val: impl AsRef<[u8]>) -> Result<()> {
+    pub const fn written_bytes(&self) -> usize {
+        self.1
+    }
+
+    #[inline]
+    pub fn write_bytes(&mut self, val: &[u8]) -> Result<()> {
+        self.1 += val.len();
         self.0.write_all(val.as_ref())
     }
 
     #[inline]
     pub fn write<U: Copy>(&mut self, val: U) -> Result<()> {
-        self.0.write_all(as_slice(&val))
+        self.write_bytes(as_slice(&val))
     }
 
     #[inline]
     pub fn write_bool(&mut self, val: bool) -> Result<()> {
-        self.0.write_all(if val { &[1] } else { &[0] })
+        self.write_bytes(if val { &[1] } else { &[0] })
     }
 
     #[inline]
     pub fn write_str(&mut self, val: impl AsRef<str>) -> Result<()> {
         let val = val.as_ref();
-        self.0.write_all(as_slice(&(val.len() as u64)))?;
-        self.0.write_all(val.as_bytes())
+        self.write_bytes(as_slice(&(val.len() as u64)))?;
+        self.write_bytes(val.as_bytes())
     }
 
     #[inline]
@@ -45,7 +52,22 @@ impl<T: Write> GGufWriter<T> {
     ) -> Result<()> {
         self.write_str(key)?;
         self.write(ty)?;
-        self.write_bytes(val)
+        self.write_bytes(val.as_ref())
+    }
+
+    #[inline]
+    pub fn write_tensor_info(
+        &mut self,
+        name: impl AsRef<str>,
+        shape: &[u64],
+        ty: GGmlType,
+        offset: usize,
+    ) -> Result<()> {
+        self.write_str(name)?;
+        self.write(shape.len() as u32)?;
+        self.write_bytes(unsafe { from_raw_parts(shape.as_ptr().cast(), size_of_val(shape)) })?;
+        self.write(ty)?;
+        self.write(offset as u64)
     }
 
     #[inline]

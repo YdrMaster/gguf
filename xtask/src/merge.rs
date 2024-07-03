@@ -1,10 +1,9 @@
-﻿use ggus::{
+﻿use crate::loose_shards::LooseShards;
+use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKVPairs, GGufReadError, GGufTensors, GGufWriter,
 };
-use indexmap::IndexSet;
-
-use crate::loose_shards::LooseShards;
-use std::{fs::File, path::PathBuf};
+use indexmap::{IndexMap, IndexSet};
+use std::{fs::File, iter::zip, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
@@ -39,23 +38,24 @@ impl MergeArgs {
             .map(|data| GGufFile::new(data).unwrap())
             .collect::<Vec<_>>();
 
-        let tensor_count = files.iter().map(|file| file.tensors.len()).sum::<usize>();
         let kvs = files
             .iter()
             .flat_map(|file| file.meta_kvs.kvs())
             .filter(|kv| {
                 let key = kv.key();
-                !key.starts_with("split.")
-                    && !key.starts_with("shard.")
-                    && key != "general.alignment"
+                !key.starts_with("split.") && key != "general.alignment"
             })
             .collect::<IndexSet<_>>();
+        let tensors = files
+            .iter()
+            .flat_map(|file| file.tensors.iter().map(move |t| (t, file.data)))
+            .collect::<IndexMap<_, _>>();
 
         let out = File::create(shards.single_file()).unwrap();
-        let header = GGufFileHeader::new(3, tensor_count as _, (kvs.len() + 1) as _);
+        let header = GGufFileHeader::new(3, tensors.len() as _, (kvs.len() + 1) as _);
         let mut writer: GGufWriter<File> = GGufWriter::new(out, header).unwrap();
 
-        let alignment = files
+        let align = files
             .iter()
             .map(|file| file.meta_kvs.alignment())
             .max()
@@ -65,7 +65,7 @@ impl MergeArgs {
             .write_meta_kv(
                 "general.alignment",
                 GGufMetaDataValueType::U64,
-                (alignment as u64).to_le_bytes(),
+                (align as u64).to_le_bytes(),
             )
             .unwrap();
 
@@ -75,8 +75,31 @@ impl MergeArgs {
                 .unwrap();
         }
 
-        drop(writer);
-        todo!()
+        let mut cursor = 0;
+        let mut paddings = Vec::with_capacity(tensors.len());
+        for t in tensors.keys() {
+            writer
+                .write_tensor_info(t.name(), t.shape(), t.ggml_type(), cursor)
+                .unwrap();
+            let nbytes = t.nbytes();
+            let length = (nbytes + align - 1) / align * align;
+            cursor += length;
+            paddings.push(length - nbytes);
+        }
+
+        let padding = (writer.written_bytes() + align - 1) / align * align - writer.written_bytes();
+        for _ in 0..padding {
+            writer.write(0u8).unwrap();
+        }
+
+        for ((t, data), padding) in zip(tensors, paddings) {
+            writer
+                .write_bytes(&data[t.offset()..][..t.nbytes()])
+                .unwrap();
+            for _ in 0..padding {
+                writer.write(0u8).unwrap();
+            }
+        }
     }
 }
 
@@ -91,6 +114,7 @@ enum GGufError<'a> {
     MagicMismatch,
     EndianNotSupport,
     VersionNotSupport,
+    #[allow(dead_code)]
     Reading(GGufReadError<'a>),
 }
 

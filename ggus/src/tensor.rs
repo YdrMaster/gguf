@@ -6,6 +6,7 @@ use crate::{
 };
 use std::{
     alloc::{alloc, dealloc, Layout},
+    hash::Hash,
     marker::PhantomData,
     ptr::{copy_nonoverlapping, NonNull},
     slice::from_raw_parts,
@@ -19,6 +20,10 @@ pub enum GGmlType {
     F16 = 1,
     Q4_0 = 2,
     Q4_1 = 3,
+    #[deprecated = "support removed"]
+    Q4_2 = 4,
+    #[deprecated = "support removed"]
+    Q4_3 = 5,
     Q5_0 = 6,
     Q5_1 = 7,
     Q8_0 = 8,
@@ -43,6 +48,42 @@ pub enum GGmlType {
     I64 = 27,
     F64 = 28,
     IQ1M = 29,
+}
+
+impl GGmlType {
+    fn nbytes(self) -> usize {
+        match self {
+            Self::F32 => sizeof!(f32),
+            Self::F16 => 2,
+            Self::Q4_0 => todo!(),
+            Self::Q4_1 => todo!(),
+            Self::Q5_0 => todo!(),
+            Self::Q5_1 => todo!(),
+            Self::Q8_0 => todo!(),
+            Self::Q8_1 => todo!(),
+            Self::Q2K => todo!(),
+            Self::Q3K => todo!(),
+            Self::Q4K => todo!(),
+            Self::Q5K => todo!(),
+            Self::Q6K => todo!(),
+            Self::Q8K => todo!(),
+            Self::IQ2XXS => todo!(),
+            Self::IQ2XS => todo!(),
+            Self::IQ3XXS => todo!(),
+            Self::IQ1S => todo!(),
+            Self::IQ4NL => todo!(),
+            Self::IQ3S => todo!(),
+            Self::IQ2S => todo!(),
+            Self::IQ4XS => todo!(),
+            Self::I8 => sizeof!(i8),
+            Self::I16 => sizeof!(i16),
+            Self::I32 => sizeof!(i32),
+            Self::I64 => sizeof!(i64),
+            Self::F64 => sizeof!(f64),
+            Self::IQ1M => todo!(),
+            _ => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -107,6 +148,22 @@ impl<'a> GGufTensors<'a> {
 #[repr(transparent)]
 pub struct GGufTensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
 
+impl PartialEq for GGufTensorInfo<'_> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.name() == other.name()
+    }
+}
+
+impl Eq for GGufTensorInfo<'_> {}
+
+impl Hash for GGufTensorInfo<'_> {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.name().hash(state)
+    }
+}
+
 impl Drop for GGufTensorInfo<'_> {
     #[inline]
     fn drop(&mut self) {
@@ -167,6 +224,11 @@ impl<'a> GGufTensorInfo<'a> {
     #[inline]
     pub fn offset(&self) -> usize {
         unsafe { self.0.as_ptr().add(2).read() as _ }
+    }
+
+    #[inline]
+    pub fn nbytes(&self) -> usize {
+        self.shape().iter().product::<u64>() as usize * self.ggml_type().nbytes()
     }
 }
 
