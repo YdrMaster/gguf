@@ -1,3 +1,4 @@
+mod loose_shards;
 mod show;
 
 use clap::Parser;
