@@ -1,12 +1,8 @@
 ﻿use ggus::{
-    GGufFileHeader, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader, GGufTensorInfo,
-    GGufTensors,
+    GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
+    GGufTensorInfo, GGufTensors,
 };
-use std::{
-    fmt::{self, Display},
-    fs::File,
-    path::PathBuf,
-};
+use std::{fmt, fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
@@ -157,98 +153,88 @@ fn show_meta_kvs(kvs: &GGufMetaKVPairs) {
 }
 
 fn show_meta_kv(kv: GGufMetaKV, width: usize) {
-    fn show<T: Display>(
-        kv: GGufMetaKV,
-        width: usize,
-        f: impl FnOnce(GGufReader) -> Result<T, GGufReadError>,
-    ) {
-        let key = kv.key();
-        match f(kv.value_reader()) {
-            Ok(v) => {
-                println!("{YES}{key:width$} {v}");
-            }
-            Err(e) => {
-                println!("{ERR}{key:width$} {e:?}");
-                exit();
-            }
+    let key = kv.key();
+    let ty = kv.ty();
+    let mut reader = kv.value_reader();
+    let mut buf = String::new();
+    match fmt_meta_val(&mut reader, ty, 1, &mut buf) {
+        Ok(()) => {
+            println!("{YES}{key:·<width$} {buf}");
+        }
+        Err(e) => {
+            println!("{ERR}{key:·<width$} {e:?}");
+            exit();
         }
     }
+}
 
-    fn show_str<'a>(reader: &mut GGufReader<'a>) -> Result<String, GGufReadError<'a>> {
-        let str = reader.read_str()?;
-        if str.lines().nth(1).is_some() {
-            struct MultiLines<'a>(&'a str);
-            impl fmt::Display for MultiLines<'_> {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    writeln!(f)?;
-                    writeln!(f, "   +--")?;
-                    for line in self.0.lines() {
-                        writeln!(f, "   | {}", line)?;
-                    }
-                    write!(f, "   +--")
-                }
-            }
-            Ok(format!("{}", MultiLines(str)))
-        } else {
-            Ok(str.to_string())
-        }
-    }
-
-    use ggus::GGufMetaDataValueType as T;
-    match kv.ty() {
-        T::U8 => show(kv, width, |mut r| r.read::<u8>()),
-        T::I8 => show(kv, width, |mut r| r.read::<i8>()),
-        T::U16 => show(kv, width, |mut r| r.read::<u16>()),
-        T::I16 => show(kv, width, |mut r| r.read::<i16>()),
-        T::U32 => show(kv, width, |mut r| r.read::<u32>()),
-        T::I32 => show(kv, width, |mut r| r.read::<i32>()),
-        T::U64 => show(kv, width, |mut r| r.read::<u64>()),
-        T::I64 => show(kv, width, |mut r| r.read::<i64>()),
-        T::F32 => show(kv, width, |mut r| r.read::<f32>().map(|x| format!("{x:e}"))),
-        T::F64 => show(kv, width, |mut r| r.read::<f64>().map(|x| format!("{x:e}"))),
-        T::Bool => show(kv, width, |mut r| {
-            r.read_bool().map(|b| if b { '√' } else { '×' })
-        }),
-        T::String => show(kv, width, |mut r| show_str(&mut r)),
-
-        T::Array => show(kv, width, |mut r| {
-            let (ty, len) = r.read_arr_header()?;
-            if len <= 8 {
-                fn show<'a, T: Display>(
-                    mut reader: GGufReader<'a>,
-                    len: usize,
-                    mut f: impl FnMut(&mut GGufReader<'a>) -> Result<T, GGufReadError<'a>>,
-                ) -> Result<String, GGufReadError<'a>> {
-                    let mut ans = String::from("[");
-                    for i in 0..len {
-                        if i > 0 {
-                            ans.push_str(", ");
+fn fmt_meta_val<'a>(
+    reader: &mut GGufReader<'a>,
+    ty: GGufMetaDataValueType,
+    len: usize,
+    buf: &mut String,
+) -> Result<(), GGufReadError<'a>> {
+    match len {
+        0 => buf.push_str("[]"),
+        1 => {
+            use GGufMetaDataValueType as T;
+            match ty {
+                T::U8 => buf.push_str(&reader.read::<u8>()?.to_string()),
+                T::I8 => buf.push_str(&reader.read::<i8>()?.to_string()),
+                T::U16 => buf.push_str(&reader.read::<u16>()?.to_string()),
+                T::I16 => buf.push_str(&reader.read::<i16>()?.to_string()),
+                T::U32 => buf.push_str(&reader.read::<u32>()?.to_string()),
+                T::I32 => buf.push_str(&reader.read::<i32>()?.to_string()),
+                T::U64 => buf.push_str(&reader.read::<u64>()?.to_string()),
+                T::I64 => buf.push_str(&reader.read::<i64>()?.to_string()),
+                T::F32 => buf.push_str(&reader.read::<f32>()?.to_string()),
+                T::F64 => buf.push_str(&reader.read::<f64>()?.to_string()),
+                T::Bool => buf.push(if reader.read()? { '√' } else { '×' }),
+                T::String => {
+                    let str = reader.read_str()?;
+                    if str.lines().nth(1).is_some() {
+                        struct MultiLines<'a>(&'a str);
+                        impl fmt::Display for MultiLines<'_> {
+                            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                                writeln!(f)?;
+                                writeln!(f, "   +--")?;
+                                for line in self.0.lines() {
+                                    writeln!(f, "   | {}", line)?;
+                                }
+                                write!(f, "   +--")
+                            }
                         }
-                        ans.push_str(&format!("{}", f(&mut reader)?));
+                        buf.push_str(&format!("{}", MultiLines(str)));
+                    } else {
+                        buf.push_str(&format!("`{str}`"));
                     }
-                    ans.push(']');
-                    Ok(ans)
                 }
-                match ty {
-                    T::U8 => show(r, len, |r| r.read::<u8>()),
-                    T::I8 => show(r, len, |r| r.read::<i8>()),
-                    T::U16 => show(r, len, |r| r.read::<u16>()),
-                    T::I16 => show(r, len, |r| r.read::<i16>()),
-                    T::U32 => show(r, len, |r| r.read::<u32>()),
-                    T::I32 => show(r, len, |r| r.read::<i32>()),
-                    T::U64 => show(r, len, |r| r.read::<u64>()),
-                    T::I64 => show(r, len, |r| r.read::<i64>()),
-                    T::F32 => show(r, len, |r| r.read::<f32>().map(|x| format!("{x:e}"))),
-                    T::F64 => show(r, len, |r| r.read::<f64>().map(|x| format!("{x:e}"))),
-                    T::Bool => show(r, len, |r| r.read_bool().map(|b| if b { '√' } else { '×' })),
-                    T::String => show(r, len, show_str),
-                    T::Array => todo!(),
+                T::Array => {
+                    let (ty, len) = reader.read_arr_header()?;
+                    fmt_meta_val(reader, ty, len, buf)?;
                 }
-            } else {
-                Ok(format!("[{ty:?}; {len}]"))
             }
-        }),
+        }
+        _ if len <= 8 => {
+            buf.push('[');
+            for i in 0..len {
+                if i > 0 {
+                    buf.push_str(", ");
+                }
+                fmt_meta_val(reader, ty, 1, buf)?;
+            }
+            buf.push(']');
+        }
+        _ => {
+            buf.push('[');
+            for _ in 0..8 {
+                fmt_meta_val(reader, ty, 1, buf)?;
+                buf.push_str(", ");
+            }
+            buf.push_str(&format!("...({} more)]", len - 8));
+        }
     }
+    Ok(())
 }
 
 fn show_tensors(tensors: &GGufTensors) {
@@ -262,7 +248,7 @@ fn show_tensors(tensors: &GGufTensors) {
     let off_width = tensors.last().unwrap().offset().to_string().len() + 1;
     for t in tensors {
         println!(
-            "{YES}{:name_width$} {:?} +{:<#0off_width$x} {:?}",
+            "{YES}{:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
             t.name(),
             t.ggml_type(),
             t.offset(),

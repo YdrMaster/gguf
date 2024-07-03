@@ -96,7 +96,7 @@ impl FromStr for GGufFileName {
 }
 
 impl fmt::Display for GGufFileName {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.model.replace(' ', "-"))?;
         if self.version != Version::PRERELEASE {
             write!(f, "-v{}.{}", self.version.major, self.version.minor)?;
@@ -149,7 +149,7 @@ pub enum ScalePrefix {
 }
 
 impl fmt::Display for ParameterScale {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.experts_count != 0 {
             write!(f, "{}x", self.experts_count)?;
         }
