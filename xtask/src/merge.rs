@@ -3,7 +3,7 @@ use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKVPairs, GGufReadError, GGufTensors, GGufWriter,
 };
 use indexmap::{IndexMap, IndexSet};
-use std::{fs::File, iter::zip, path::PathBuf};
+use std::{fs::File, iter::zip, path::PathBuf, thread};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
@@ -31,12 +31,16 @@ impl MergeArgs {
                 }
             }
         }
-        let files = files;
 
-        let files = files
-            .iter()
-            .map(|data| GGufFile::new(data).unwrap())
-            .collect::<Vec<_>>();
+        let files = thread::scope(|s| {
+            files
+                .iter()
+                .map(|data| s.spawn(|| GGufFile::new(data).unwrap()))
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .collect::<Vec<_>>()
+        });
 
         let kvs = files
             .iter()
@@ -76,31 +80,38 @@ impl MergeArgs {
         }
 
         let mut cursor = 0;
-        let mut paddings = Vec::with_capacity(tensors.len());
+        let mut paddings = Vec::with_capacity(tensors.len() + 1);
+        paddings.push(0);
+
         for t in tensors.keys() {
             writer
                 .write_tensor_info(t.name(), t.shape(), t.ggml_type(), cursor)
                 .unwrap();
-            let nbytes = t.nbytes();
-            let length = (nbytes + align - 1) / align * align;
-            cursor += length;
-            paddings.push(length - nbytes);
+
+            cursor += t.nbytes();
+            let padding = pad(cursor, align);
+
+            cursor += padding;
+            paddings.push(padding);
         }
 
-        let padding = (writer.written_bytes() + align - 1) / align * align - writer.written_bytes();
-        for _ in 0..padding {
-            writer.write(0u8).unwrap();
-        }
+        paddings.pop();
+        paddings[0] = pad(writer.written_bytes(), align);
 
         for ((t, data), padding) in zip(tensors, paddings) {
-            writer
-                .write_bytes(&data[t.offset()..][..t.nbytes()])
-                .unwrap();
             for _ in 0..padding {
                 writer.write(0u8).unwrap();
             }
+            writer
+                .write_bytes(&data[t.offset()..][..t.nbytes()])
+                .unwrap();
         }
     }
+}
+
+#[inline(always)]
+const fn pad(pos: usize, align: usize) -> usize {
+    (align - pos % align) % align
 }
 
 struct GGufFile<'a> {
