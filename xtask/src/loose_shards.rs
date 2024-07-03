@@ -11,6 +11,18 @@ pub(crate) struct LooseShards {
     shards_format: usize,
 }
 
+impl LooseShards {
+    #[inline]
+    pub const fn count(&self) -> usize {
+        self.shards_count
+    }
+
+    #[inline]
+    pub fn single_file(&self) -> PathBuf {
+        self.dir.join(&self.prefix).with_extension(&self.extension)
+    }
+}
+
 impl From<&'_ Path> for LooseShards {
     fn from(file: &Path) -> Self {
         let dir = file.parent().unwrap().to_path_buf();
@@ -60,12 +72,7 @@ impl<'a> Iterator for Iter<'a> {
             0 => {
                 if self.1 == 0 {
                     self.1 += 1;
-                    Some(
-                        self.0
-                            .dir
-                            .join(&self.0.prefix)
-                            .with_extension(&self.0.extension),
-                    )
+                    Some(self.0.single_file())
                 } else {
                     None
                 }

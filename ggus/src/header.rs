@@ -4,7 +4,7 @@ use std::str::Utf8Error;
 #[derive(Default, Debug)]
 #[repr(C)]
 pub struct GGufFileHeader {
-    pub magic: [u8; 4],
+    magic: [u8; 4],
     pub version: u32,
     pub tensor_count: u64,
     pub metadata_kv_count: u64,
@@ -13,6 +13,16 @@ pub struct GGufFileHeader {
 const MAGIC: [u8; 4] = *b"GGUF";
 
 impl GGufFileHeader {
+    #[inline]
+    pub const fn new(version: u32, tensor_count: u64, metadata_kv_count: u64) -> Self {
+        Self {
+            magic: MAGIC,
+            version,
+            tensor_count,
+            metadata_kv_count,
+        }
+    }
+
     #[inline]
     pub fn is_magic_correct(&self) -> bool {
         self.magic == MAGIC

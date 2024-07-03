@@ -11,4 +11,5 @@ readme = "README.md"
 keywords = ["gguf", "ggml", "llama-cpp"]
 categories = ["parsing", "parser-implementations", "encoding"]
 
-[dev-dependencies]
+[dependencies]
+indexmap.workspace = true

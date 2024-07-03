@@ -1,10 +1,11 @@
-﻿use crate::{
+﻿use indexmap::IndexMap;
+
+use crate::{
     reader::{GGufReadError, GGufReader},
     sizeof,
 };
 use std::{
     alloc::{alloc, dealloc, Layout},
-    collections::HashMap,
     marker::PhantomData,
     ptr::{copy_nonoverlapping, NonNull},
     slice::from_raw_parts,
@@ -46,14 +47,14 @@ pub enum GGmlType {
 
 #[derive(Clone, Debug)]
 pub struct GGufTensors<'a> {
-    indices: HashMap<&'a str, ()>,
+    indices: IndexMap<&'a str, ()>,
     nbytes: usize,
 }
 
 impl<'a> GGufTensors<'a> {
     pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
         let mut reader = GGufReader::new(data);
-        let mut indices = HashMap::with_capacity(count as _);
+        let mut indices = IndexMap::with_capacity(count as _);
         for _ in 0..count {
             let name = reader.read_str()?;
             let ndim = reader.read::<u32>()? as usize;
@@ -68,6 +69,16 @@ impl<'a> GGufTensors<'a> {
             indices,
             nbytes: reader.cursor(),
         })
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.indices.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
     }
 
     #[inline]

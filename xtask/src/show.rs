@@ -1,7 +1,7 @@
 ﻿use crate::loose_shards::LooseShards;
 use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
-    GGufTensorInfo, GGufTensors,
+    GGufTensors,
 };
 use std::{fmt, fs::File, path::PathBuf};
 
@@ -131,34 +131,14 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
 }
 
 fn show_meta_kvs(kvs: &GGufMetaKVPairs) -> Result<(), Failed> {
-    show_title("Meta KV");
-
-    let Some(width) = kvs.keys().map(|k| k.len()).max() else {
-        return Ok(());
-    };
-    let mut topic = kvs
-        .kvs()
-        .filter(|k| k.key().starts_with("general."))
-        .collect::<Vec<_>>();
-    if !topic.is_empty() {
-        topic.sort_unstable_by_key(GGufMetaKV::key);
-        for kv in topic {
+    if let Some(width) = kvs.keys().map(|k| k.len()).max() {
+        show_title("Meta KV");
+        for kv in kvs.kvs() {
             show_meta_kv(kv, width)?;
         }
         println!();
     }
 
-    let mut topic = kvs
-        .kvs()
-        .filter(|k| !k.key().starts_with("general."))
-        .collect::<Vec<_>>();
-    if !topic.is_empty() {
-        topic.sort_unstable_by_key(GGufMetaKV::key);
-        for kv in topic {
-            show_meta_kv(kv, width)?;
-        }
-        println!();
-    }
     Ok(())
 }
 
@@ -260,22 +240,20 @@ fn fmt_meta_val<'a>(
 }
 
 fn show_tensors(tensors: &GGufTensors) -> Result<(), Failed> {
-    show_title("Tensors");
-
-    let Some(name_width) = tensors.names().map(|k| k.len()).max() else {
-        return Ok(());
-    };
-    let mut tensors = tensors.iter().collect::<Vec<_>>();
-    tensors.sort_unstable_by_key(GGufTensorInfo::offset);
-    let off_width = tensors.last().unwrap().offset().to_string().len() + 1;
-    for t in tensors {
-        println!(
-            "{YES}{:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
-            t.name(),
-            t.ggml_type(),
-            t.offset(),
-            t.shape()
-        );
+    if let Some(name_width) = tensors.names().map(|k| k.len()).max() {
+        show_title("Tensors");
+        let tensors = tensors.iter().collect::<Vec<_>>();
+        let off_width = tensors.last().unwrap().offset().to_string().len() + 1;
+        for t in tensors {
+            println!(
+                "{YES}{:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
+                t.name(),
+                t.ggml_type(),
+                t.offset(),
+                t.shape(),
+            );
+        }
     }
+
     Ok(())
 }

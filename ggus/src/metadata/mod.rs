@@ -8,7 +8,8 @@ use crate::{
     reader::{GGufReadError, GGufReader},
     sizeof,
 };
-use std::{collections::HashMap, slice::from_raw_parts};
+use indexmap::IndexMap;
+use std::{hash::Hash, slice::from_raw_parts};
 
 pub use tokenizer::{utok, GGufArray};
 
@@ -76,14 +77,14 @@ pub enum GGufFileType {
 
 #[derive(Clone, Debug)]
 pub struct GGufMetaKVPairs<'a> {
-    indices: HashMap<&'a str, usize>,
+    indices: IndexMap<&'a str, usize>,
     nbytes: usize,
 }
 
 impl<'a> GGufMetaKVPairs<'a> {
     pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
         let mut reader = GGufReader::new(data);
-        let mut indices = HashMap::with_capacity(count as _);
+        let mut indices = IndexMap::with_capacity(count as _);
         for _ in 0..count {
             let key = reader.read_str()?;
             let ty = reader.read()?;
@@ -97,6 +98,16 @@ impl<'a> GGufMetaKVPairs<'a> {
             indices,
             nbytes: reader.cursor(),
         })
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.indices.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.indices.is_empty()
     }
 
     #[inline]
@@ -176,6 +187,22 @@ pub struct GGufMetaKV<'a> {
     len: usize,
 }
 
+impl PartialEq for GGufMetaKV<'_> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.key.as_ptr() == other.key.as_ptr()
+    }
+}
+
+impl Eq for GGufMetaKV<'_> {}
+
+impl Hash for GGufMetaKV<'_> {
+    #[inline]
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key.as_ptr().hash(state)
+    }
+}
+
 impl<'a> GGufMetaKV<'a> {
     #[inline]
     pub fn key(&self) -> &'a str {
@@ -194,8 +221,8 @@ impl<'a> GGufMetaKV<'a> {
     }
 
     #[inline]
-    pub fn value_reader(&self) -> GGufReader<'a> {
-        GGufReader::new(unsafe {
+    pub fn value_bytes(&self) -> &'a [u8] {
+        unsafe {
             from_raw_parts(
                 self.key
                     .as_ptr()
@@ -203,6 +230,11 @@ impl<'a> GGufMetaKV<'a> {
                     .add(sizeof!(GGufMetaDataValueType)),
                 self.len,
             )
-        })
+        }
+    }
+
+    #[inline]
+    pub fn value_reader(&self) -> GGufReader<'a> {
+        GGufReader::new(self.value_bytes())
     }
 }

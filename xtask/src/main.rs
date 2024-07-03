@@ -1,17 +1,18 @@
 mod loose_shards;
+mod merge;
 mod show;
-
-use clap::Parser;
+mod split;
 
 #[macro_use]
 extern crate clap;
+use clap::Parser;
 
 fn main() {
     use Commands::*;
     match Cli::parse().command {
         Show(args) => args.show(),
-        Split => todo!(),
-        Merge => todo!(),
+        Split(args) => args.split(),
+        Merge(args) => args.merge(),
     }
 }
 
@@ -26,6 +27,6 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     Show(show::ShowArgs),
-    Split,
-    Merge,
+    Split(split::SplitArgs),
+    Merge(merge::MergeArgs),
 }
