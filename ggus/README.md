@@ -7,4 +7,6 @@
 
 GGUF in Rust🦀.
 
-See the [Documentation](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) for details.
+See the [specification](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) for details.
+
+There is an [example usage](https://github.com/YdrMaster/gguf/blob/main/xtask/src/show.rs) to print the contents of GGUF files.
