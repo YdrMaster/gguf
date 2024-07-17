@@ -1,7 +1,7 @@
 ﻿use crate::sizeof;
 use std::str::Utf8Error;
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 #[repr(C)]
 pub struct GGufFileHeader {
     magic: [u8; 4],

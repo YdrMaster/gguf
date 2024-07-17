@@ -57,7 +57,9 @@ impl MergeArgs {
 
         let out = File::create(shards.single_file()).unwrap();
         let header = GGufFileHeader::new(3, tensors.len() as _, (kvs.len() + 1) as _);
-        let mut writer: GGufWriter<File> = GGufWriter::new(out, header).unwrap();
+        // let mut writer: GGufWriter<File> = GGufWriter::new(out).unwrap();
+        // writer.write_head(header).unwrap();
+        let mut writer = GGufWriter::new(out, header).unwrap();
 
         let align = files
             .iter()
@@ -68,7 +70,7 @@ impl MergeArgs {
         writer
             .write_meta_kv(
                 "general.alignment",
-                GGufMetaDataValueType::U64,
+                GGufMetaDataValueType::U32,
                 (align as u64).to_le_bytes(),
             )
             .unwrap();
@@ -135,9 +137,11 @@ impl<'a> GGufFile<'a> {
         if !header.is_magic_correct() {
             return Err(GGufError::MagicMismatch);
         }
+
         if !header.is_native_endian() {
             return Err(GGufError::EndianNotSupport);
         }
+
         if header.version != 3 {
             return Err(GGufError::VersionNotSupport);
         }
@@ -147,11 +151,13 @@ impl<'a> GGufFile<'a> {
             .map_err(GGufError::Reading)?;
 
         let cursor = cursor + meta_kvs.nbytes();
+
         let tensors =
             GGufTensors::scan(header.tensor_count, &data[cursor..]).map_err(GGufError::Reading)?;
 
         let align = meta_kvs.alignment();
         let cursor = (cursor + tensors.nbytes() + align - 1) / align * align;
+
         Ok(Self {
             meta_kvs,
             tensors,

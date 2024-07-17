@@ -10,9 +10,9 @@ pub struct GGufWriter<T: Write>(BufWriter<T>, usize);
 impl<T: Write> GGufWriter<T> {
     #[inline]
     pub fn new(writer: T, header: GGufFileHeader) -> Result<Self> {
-        let mut buf = BufWriter::new(writer);
-        buf.write_all(as_slice(&header))?;
-        Ok(Self(buf, 0))
+        let mut ans = Self(BufWriter::new(writer), 0);
+        ans.write_bytes(as_slice(&header))?;
+        Ok(ans)
     }
 
     #[inline]
