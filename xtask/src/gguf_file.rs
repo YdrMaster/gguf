@@ -51,15 +51,15 @@ impl<'a> GGufFile<'a> {
         })
     }
 
-    pub(crate) fn get_header(&self) -> &GGufFileHeader {
+    pub fn header(&self) -> &GGufFileHeader {
         &self.header
     }
 
-    pub(crate) fn get_meta_kvs(&self) -> &GGufMetaKVPairs<'a> {
+    pub fn meta_kvs(&self) -> &GGufMetaKVPairs<'a> {
         &self.meta_kvs
     }
 
-    pub(crate) fn get_tensors_as_indexmap(&self) -> IndexMap<ggus::GGufTensorInfo, &[u8]> {
+    pub fn tensors_as_indexmap(&self) -> IndexMap<ggus::GGufTensorInfo, &[u8]> {
         self.tensors
             .iter()
             .map(move |t| (t, self.data))

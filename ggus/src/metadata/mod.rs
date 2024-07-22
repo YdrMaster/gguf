@@ -1,4 +1,4 @@
-﻿//! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
+//! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
 
 mod general;
 mod llm;
@@ -139,6 +139,16 @@ impl<'a> GGufMetaKVPairs<'a> {
         self.indices
             .get_key_value(key.as_ref())
             .map(|(&key, &len)| GGufMetaKV { key, len })
+    }
+
+    pub fn remove(&mut self, _key: &str) -> bool {
+        match self.indices.swap_remove_entry(_key) {
+            Some((_, v)) => {
+                self.nbytes -= v;
+                true
+            }
+            None => false,
+        }
     }
 
     fn get_typed(

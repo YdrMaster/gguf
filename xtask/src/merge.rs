@@ -45,7 +45,7 @@ impl MergeArgs {
 
         let kvs = files
             .iter()
-            .flat_map(|file| file.get_meta_kvs().kvs())
+            .flat_map(|file| file.meta_kvs().kvs())
             .filter(|kv| {
                 let key = kv.key();
                 !key.starts_with("split.") && key != "general.alignment"
@@ -53,7 +53,7 @@ impl MergeArgs {
             .collect::<IndexSet<_>>();
         let tensors = files
             .iter()
-            .flat_map(|file| file.get_tensors_as_indexmap())
+            .flat_map(|file| file.tensors_as_indexmap())
             .collect::<IndexMap<_, _>>();
 
         let out = File::create(shards.single_file()).unwrap();
@@ -62,7 +62,7 @@ impl MergeArgs {
 
         let align = files
             .iter()
-            .map(|file| file.get_meta_kvs().alignment())
+            .map(|file| file.meta_kvs().alignment())
             .max()
             .unwrap();
 

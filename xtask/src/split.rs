@@ -1,4 +1,7 @@
-﻿use crate::gguf_file::{pad, GGufError, GGufFile};
+﻿use crate::{
+    gguf_file::{pad, GGufError, GGufFile},
+    loose_shards::LooseShards,
+};
 use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufMetaKVPairs, GGufWriter};
 use std::{fs::File, path::PathBuf};
 
@@ -50,6 +53,11 @@ impl<'a> GGufFileInfo<'a> {
 
 impl SplitArgs {
     pub fn split(self) {
+        let shards = LooseShards::from(&*self.input);
+        if shards.count() > 1 {
+            println!("Model has already been splited");
+            return;
+        }
         let file = File::open(&self.input)
             .map_err(|e| {
                 println!("Failed to open");
@@ -60,10 +68,10 @@ impl SplitArgs {
         let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
         let ctx_gguf: GGufFile = GGufFile::new(&mmap).unwrap();
 
-        let align = ctx_gguf.get_meta_kvs().alignment();
+        let align = ctx_gguf.meta_kvs().alignment();
         let ggufs = self.split_strategy(ctx_gguf.clone()).unwrap();
 
-        let tensors = ctx_gguf.get_tensors_as_indexmap();
+        let tensors = ctx_gguf.tensors_as_indexmap();
         let mut tensor_iter: indexmap::map::Iter<ggus::GGufTensorInfo, &[u8]> = tensors.iter();
 
         for gguf in ggufs {
@@ -75,12 +83,6 @@ impl SplitArgs {
 
             let kvs = gguf.meta_kvs.kvs();
             for kv in kvs {
-                if kv.key() == LLM_KV_SPLIT_TENSORS_COUNT
-                    || kv.key() == LLM_KV_SPLIT_COUNT
-                    || kv.key() == LLM_KV_SPLIT_NO
-                {
-                    continue;
-                }
                 writer
                     .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
                     .unwrap();
@@ -197,10 +199,10 @@ impl SplitArgs {
             },
         }
 
-        let tensors = ctx_gguf.get_tensors_as_indexmap();
+        let tensors = ctx_gguf.tensors_as_indexmap();
 
         let mut ggufs: Vec<GGufFileInfo> = Vec::new();
-        let n_tensors: u64 = ctx_gguf.get_header().tensor_count;
+        let n_tensors: u64 = ctx_gguf.header().tensor_count;
 
         let setup_gguf_file = |i_split: u64, n_tensors: u64| {
             let mut gguf_file = GGufFileInfo::new_empty();
@@ -221,19 +223,19 @@ impl SplitArgs {
 
         let mut i_split: u64 = 1;
         let mut gguf_file = setup_gguf_file(i_split, n_tensors);
-        gguf_file.meta_kvs = ctx_gguf.get_meta_kvs().clone();
+        gguf_file.meta_kvs = ctx_gguf.meta_kvs().clone();
 
-        if gguf_file.meta_kvs.get(LLM_KV_SPLIT_NO).is_some() {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
-        if gguf_file.meta_kvs.get(LLM_KV_SPLIT_COUNT).is_some() {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
-        if gguf_file.meta_kvs.get(LLM_KV_SPLIT_TENSORS_COUNT).is_some() {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
+        gguf_file.header.metadata_kv_count += ctx_gguf.header().metadata_kv_count;
 
-        gguf_file.header.metadata_kv_count += ctx_gguf.get_header().metadata_kv_count;
+        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_NO) {
+            gguf_file.header.metadata_kv_count -= 1;
+        }
+        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_COUNT) {
+            gguf_file.header.metadata_kv_count -= 1;
+        }
+        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_TENSORS_COUNT) {
+            gguf_file.header.metadata_kv_count -= 1;
+        }
 
         if self.no_tensor_first_split {
             ggufs.push(gguf_file);
@@ -267,7 +269,12 @@ impl SplitArgs {
         let output_path = &self.output.unwrap();
         let mut index = 0;
         while index < ggufs.len() {
-            ggufs[index].output_path = split_path(output_path, index + 1, ggufs.len());
+            ggufs[index].output_path = format!(
+                "{}-{:05}-of-{:05}.gguf",
+                output_path,
+                index + 1,
+                ggufs.len()
+            );
             ggufs[index].new_kv_tuples[1] = (LLM_KV_SPLIT_COUNT.to_string(), ty::U16, tensor_count);
             index += 1;
         }
@@ -281,30 +288,5 @@ impl SplitArgs {
         } else {
             i_tensor > 0 && i_tensor < n_tensors && i_tensor % self.n_split_tensors == 0
         }
-    }
-}
-
-fn split_path(path_prefix: &String, split_no: usize, split_count: usize) -> String {
-    format!("{}-{:05}-of-{:05}.gguf", path_prefix, split_no, split_count)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn it_works() {
-        let input = PathBuf::from("/home/qinyiqun/gguf/xtask/src/test/rust/rust_ori.gguf");
-        let output = Some("/home/qinyiqun/gguf/xtask/src/test/rust/rust_ori_oi".to_string());
-        let split_args = SplitArgs {
-            input,
-            output,
-            split_max_tensors: None,
-            split_max_size: Some("300M".to_string()),
-            no_tensor_first_split: true,
-            n_bytes_split: 0,
-            n_split_tensors: 0,
-        };
-
-        split_args.split();
     }
 }
