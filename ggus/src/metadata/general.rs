@@ -1,5 +1,7 @@
 ﻿use super::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaKVPairs};
 
+pub const GENERAL_ALIGNMENT: &str = "general.alignment";
+
 impl<'a> GGufMetaKVPairs<'a> {
     pub fn architecture(&self) -> Option<&'a str> {
         self.get_typed("general.architecture", Ty::String)
@@ -14,7 +16,7 @@ impl<'a> GGufMetaKVPairs<'a> {
 
     #[inline]
     pub fn alignment(&self) -> usize {
-        self.get_typed("general.alignment", Ty::U32)
+        self.get_typed(GENERAL_ALIGNMENT, Ty::U32)
             .map_or(32, |mut reader| reader.read::<u32>().unwrap() as _)
     }
 

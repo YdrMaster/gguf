@@ -1,4 +1,4 @@
-﻿use crate::{sizeof, tensor::GGmlType, GGufFileHeader, GGufMetaDataValueType};
+﻿use crate::{sizeof, tensor::GGmlType, GGufFileHeader, GGufMetaDataValueType, GENERAL_ALIGNMENT};
 use internal::Internal;
 use std::{
     io::{Result, Write},
@@ -56,7 +56,7 @@ impl<T: Write> GGufWriter<T> {
 
     pub fn write_alignment(&mut self, align: usize) -> Result<()> {
         self.write_meta_kv(
-            "general.alignment",
+            GENERAL_ALIGNMENT,
             GGufMetaDataValueType::U32,
             (align as u32).to_le_bytes(),
         )

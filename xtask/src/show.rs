@@ -1,4 +1,4 @@
-﻿use crate::loose_shards::LooseShards;
+﻿use crate::{loose_shards::LooseShards, ERR, YES};
 use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
     GGufTensors,
@@ -13,9 +13,6 @@ pub struct ShowArgs {
     #[clap(long)]
     shards: bool,
 }
-
-const YES: &str = "✔️  ";
-const ERR: &str = "❌  ";
 
 struct Failed;
 

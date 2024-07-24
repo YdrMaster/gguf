@@ -1,3 +1,4 @@
+mod file_info;
 mod gguf_file;
 mod loose_shards;
 mod merge;
@@ -31,3 +32,6 @@ enum Commands {
     Split(split::SplitArgs),
     Merge(merge::MergeArgs),
 }
+
+const YES: &str = "✔️  ";
+const ERR: &str = "❌  ";

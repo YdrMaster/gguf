@@ -11,7 +11,7 @@ mod writer;
 pub use header::GGufFileHeader;
 pub use metadata::{
     utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs,
-    GGufTokenType,
+    GGufTokenType, GENERAL_ALIGNMENT,
 };
 pub use name::GGufFileName;
 pub use reader::{GGufReadError, GGufReader};

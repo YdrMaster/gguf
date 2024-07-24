@@ -1,9 +1,8 @@
-﻿use indexmap::IndexMap;
-
-use crate::{
+﻿use crate::{
     reader::{GGufReadError, GGufReader},
     sizeof,
 };
+use indexmap::IndexMap;
 use std::{
     alloc::{alloc, dealloc, Layout},
     hash::Hash,

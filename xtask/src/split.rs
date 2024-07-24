@@ -1,8 +1,10 @@
 ﻿use crate::{
+    file_info::print_file_info,
     gguf_file::{pad, GGufFile},
     loose_shards::LooseShards,
+    YES,
 };
-use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufTensorInfo, GGufWriter};
+use ggus::{GGufFileHeader, GGufTensorInfo, GGufWriter};
 use std::{
     fs::File,
     io::{Result as IoResult, Write},
@@ -119,9 +121,9 @@ impl SplitArgs {
         // 写入第一个分片
         {
             let n_tensors = shards[0].n_tensors;
-            let first = File::create(file_format.get(0).unwrap()).unwrap();
+            let path = file_format.get(0).unwrap();
             let header = GGufFileHeader::new(3, n_tensors as _, filter_split as _);
-            let mut writer = GGufWriter::new(first, header).unwrap();
+            let mut writer = GGufWriter::new(File::create(&path).unwrap(), header).unwrap();
             for kv in source.meta_kvs.kvs() {
                 if !kv.key().starts_with("split.") {
                     writer
@@ -130,14 +132,17 @@ impl SplitArgs {
                 }
             }
             write_tensors(&mut writer, &tensors[..n_tensors], align, &source);
+
+            println!("{YES}Shard is written to: \"{}\"", path.display());
+            print_file_info(n_tensors, filter_split, writer.written_bytes());
         }
         // 写入其他分片
         let mut used_tensors = shards[0].n_tensors;
         for (i, shard) in shards.into_iter().enumerate().skip(1) {
             let n_tensors = shard.n_tensors;
-            let file = File::create(&file_format.get(i).unwrap()).unwrap();
+            let path = file_format.get(i).unwrap();
             let header = GGufFileHeader::new(3, n_tensors as _, 1);
-            let mut writer = GGufWriter::new(file, header).unwrap();
+            let mut writer = GGufWriter::new(File::create(&path).unwrap(), header).unwrap();
             writer.write_alignment(align).unwrap();
 
             write_tensors(
@@ -147,6 +152,9 @@ impl SplitArgs {
                 &source,
             );
             used_tensors += n_tensors;
+
+            println!("{YES}Shard is written to: \"{}\"", path.display());
+            print_file_info(n_tensors, 1, writer.written_bytes());
         }
     }
 }
@@ -171,13 +179,7 @@ impl Write for NWriter {
 
 fn others_size() -> usize {
     let mut writer = GGufWriter::new(NWriter, GGufFileHeader::new(3, 0, 0)).unwrap();
-    writer
-        .write_meta_kv(
-            "general.alignment",
-            GGufMetaDataValueType::U32,
-            0u32.to_le_bytes(),
-        )
-        .unwrap();
+    writer.write_alignment(0).unwrap();
     writer.written_bytes()
 }
 

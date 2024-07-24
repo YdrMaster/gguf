@@ -1,8 +1,10 @@
 ﻿use crate::{
+    file_info::print_file_info,
     gguf_file::{pad, GGufFile},
     loose_shards::LooseShards,
+    YES,
 };
-use ggus::{GGufFileHeader, GGufWriter};
+use ggus::{GGufFileHeader, GGufWriter, GENERAL_ALIGNMENT};
 use indexmap::{IndexMap, IndexSet};
 use std::{fs::File, iter::zip, path::PathBuf, thread};
 
@@ -52,7 +54,7 @@ impl MergeArgs {
             .flat_map(|file| file.meta_kvs.kvs())
             .filter(|kv| {
                 let key = kv.key();
-                !key.starts_with("split.") && key != "general.alignment"
+                !key.starts_with("split.") && key != GENERAL_ALIGNMENT
             })
             .collect::<IndexSet<_>>();
         let tensors = files
@@ -75,8 +77,10 @@ impl MergeArgs {
             .max()
             .unwrap();
         // 写入合并后的文件
+        let n_tensors = tensors.len();
+        let n_meta_kvs = kvs.len() + 1;
         let out = File::create(file_format.single_file()).unwrap();
-        let header = GGufFileHeader::new(3, tensors.len() as _, (kvs.len() + 1) as _);
+        let header = GGufFileHeader::new(3, n_tensors as _, n_meta_kvs as _);
         let mut writer = GGufWriter::new(out, header).unwrap();
 
         writer.write_alignment(align).unwrap();
@@ -113,5 +117,11 @@ impl MergeArgs {
                 .write_bytes(&files[i].data[t.offset()..][..t.nbytes()])
                 .unwrap();
         }
+
+        println!(
+            "{YES}Merged file is written to: \"{}\"",
+            file_format.single_file().display()
+        );
+        print_file_info(n_tensors, n_meta_kvs, writer.written_bytes());
     }
 }
