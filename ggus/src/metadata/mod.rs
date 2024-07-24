@@ -1,4 +1,4 @@
-﻿//! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
+//! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
 
 mod general;
 mod llm;
@@ -82,6 +82,14 @@ pub struct GGufMetaKVPairs<'a> {
 }
 
 impl<'a> GGufMetaKVPairs<'a> {
+    pub fn new(nbytes_: usize) -> Self {
+        let indices_ = IndexMap::new();
+        Self {
+            indices: indices_,
+            nbytes: nbytes_,
+        }
+    }
+
     pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
         let mut reader = GGufReader::new(data);
         let mut indices = IndexMap::with_capacity(count as _);
@@ -131,6 +139,16 @@ impl<'a> GGufMetaKVPairs<'a> {
         self.indices
             .get_key_value(key.as_ref())
             .map(|(&key, &len)| GGufMetaKV { key, len })
+    }
+
+    pub fn remove(&mut self, _key: &str) -> bool {
+        match self.indices.swap_remove_entry(_key) {
+            Some((_, v)) => {
+                self.nbytes -= v;
+                true
+            }
+            None => false,
+        }
     }
 
     fn get_typed(

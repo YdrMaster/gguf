@@ -1,3 +1,4 @@
+mod gguf_file;
 mod loose_shards;
 mod merge;
 mod show;

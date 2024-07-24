@@ -93,6 +93,14 @@ pub struct GGufTensors<'a> {
 }
 
 impl<'a> GGufTensors<'a> {
+    pub fn new(nbytes_: usize) -> Self {
+        let indices_: IndexMap<&str, ()> = IndexMap::new();
+        Self {
+            indices: indices_,
+            nbytes: nbytes_,
+        }
+    }
+
     pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
         let mut reader = GGufReader::new(data);
         let mut indices = IndexMap::with_capacity(count as _);
