@@ -7,8 +7,9 @@ use std::{fmt, fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
-    #[clap(long, short)]
+    /// The file to show
     file: PathBuf,
+    /// If set, show all shards in the directory
     #[clap(long)]
     shards: bool,
 }
@@ -32,7 +33,7 @@ impl ShowArgs {
         };
 
         if files.is_empty() {
-            println!("{ERR}No file found.");
+            eprintln!("{ERR}No file found.");
             return;
         }
 
@@ -53,33 +54,34 @@ impl ShowArgs {
 
             let header = unsafe { file.as_ptr().cast::<GGufFileHeader>().read() };
             if let Err(Failed) = show_header(&header) {
-                return;
+                println!();
+                continue;
             }
 
             let cursor = header.nbytes();
             let kvs = match GGufMetaKVPairs::scan(header.metadata_kv_count, &file[cursor..]) {
                 Ok(kvs) => kvs,
                 Err(e) => {
-                    println!("{ERR}{e:?}");
-                    return;
+                    eprintln!("{ERR}{e:?}");
+                    println!();
+                    continue;
                 }
             };
             if let Err(Failed) = show_meta_kvs(&kvs) {
-                return;
+                println!();
+                continue;
             }
 
             let cursor = cursor + kvs.nbytes();
             let tensors = match GGufTensors::scan(header.tensor_count, &file[cursor..]) {
                 Ok(tensors) => tensors,
                 Err(e) => {
-                    println!("{ERR}{e:?}");
-                    return;
+                    eprintln!("{ERR}{e:?}");
+                    println!();
+                    continue;
                 }
             };
-            if let Err(Failed) = show_tensors(&tensors) {
-                return;
-            }
-
+            let _ = show_tensors(&tensors);
             println!();
         }
     }
@@ -102,7 +104,7 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
     if header.is_magic_correct() {
         println!("{YES}Magic   = {:?}", header.magic().unwrap());
     } else {
-        println!("{ERR}Magic   = {:?}", header.magic());
+        eprintln!("{ERR}Magic   = {:?}", header.magic());
         return Err(Failed);
     }
     let native_endian = if u16::from_le(1) == 1 {
@@ -115,13 +117,13 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
     if header.is_native_endian() {
         println!("{YES}Endian  = {native_endian}");
     } else {
-        println!("{ERR}Endian  = {native_endian}");
+        eprintln!("{ERR}Endian  = {native_endian}");
         return Err(Failed);
     }
     if header.version == 3 {
         println!("{YES}Version = {}", header.version);
     } else {
-        println!("{ERR}Version = {}", header.version);
+        eprintln!("{ERR}Version = {}", header.version);
         return Err(Failed);
     }
     println!("{YES}MetaKVs = {}", header.metadata_kv_count);
@@ -153,7 +155,7 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize) -> Result<(), Failed> {
             Ok(())
         }
         Err(e) => {
-            println!("{ERR}{key:·<width$} {e:?}");
+            eprintln!("{ERR}{key:·<width$} {e:?}");
             Err(Failed)
         }
     }

@@ -1,12 +1,13 @@
 use ggus::{GGufFileHeader, GGufMetaKVPairs, GGufReadError, GGufTensors};
-use indexmap::IndexMap;
+use std::{error::Error, fmt};
 
 #[derive(Clone)]
 pub(crate) struct GGufFile<'a> {
-    header: GGufFileHeader,
-    meta_kvs: GGufMetaKVPairs<'a>,
-    tensors: GGufTensors<'a>,
-    data: &'a [u8],
+    #[allow(unused)]
+    pub header: GGufFileHeader,
+    pub meta_kvs: GGufMetaKVPairs<'a>,
+    pub tensors: GGufTensors<'a>,
+    pub data: &'a [u8],
 }
 
 #[derive(Debug)]
@@ -14,14 +15,24 @@ pub(crate) enum GGufError<'a> {
     MagicMismatch,
     EndianNotSupport,
     VersionNotSupport,
-    #[allow(dead_code)]
     Reading(GGufReadError<'a>),
-    FileSizeError,
-    SplitModeRepeated,
 }
 
+impl fmt::Display for GGufError<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MagicMismatch => f.write_str("magic mismatch"),
+            Self::EndianNotSupport => f.write_str("endian not support"),
+            Self::VersionNotSupport => f.write_str("version not support"),
+            Self::Reading(e) => write!(f, "reading error: {e:?}"),
+        }
+    }
+}
+
+impl Error for GGufError<'_> {}
+
 impl<'a> GGufFile<'a> {
-    pub(crate) fn new(data: &'a [u8]) -> Result<Self, GGufError<'a>> {
+    pub fn new(data: &'a [u8]) -> Result<Self, GGufError<'a>> {
         let header = unsafe { data.as_ptr().cast::<GGufFileHeader>().read() };
         if !header.is_magic_correct() {
             return Err(GGufError::MagicMismatch);
@@ -41,29 +52,18 @@ impl<'a> GGufFile<'a> {
         let tensors =
             GGufTensors::scan(header.tensor_count, &data[cursor..]).map_err(GGufError::Reading)?;
 
-        let align = meta_kvs.alignment();
-        let cursor = (cursor + tensors.nbytes() + align - 1) / align * align;
+        let cursor = cursor + tensors.nbytes();
+        let padding = if tensors.is_empty() {
+            0
+        } else {
+            pad(cursor, meta_kvs.alignment())
+        };
         Ok(Self {
             header,
             meta_kvs,
             tensors,
-            data: &data[cursor..],
+            data: &data[cursor + padding..],
         })
-    }
-
-    pub fn header(&self) -> &GGufFileHeader {
-        &self.header
-    }
-
-    pub fn meta_kvs(&self) -> &GGufMetaKVPairs<'a> {
-        &self.meta_kvs
-    }
-
-    pub fn tensors_as_indexmap(&self) -> IndexMap<ggus::GGufTensorInfo, &[u8]> {
-        self.tensors
-            .iter()
-            .map(move |t| (t, self.data))
-            .collect::<IndexMap<_, _>>()
     }
 }
 

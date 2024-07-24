@@ -2,24 +2,28 @@
     gguf_file::{pad, GGufFile},
     loose_shards::LooseShards,
 };
-use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufWriter};
+use ggus::{GGufFileHeader, GGufWriter};
 use indexmap::{IndexMap, IndexSet};
 use std::{fs::File, iter::zip, path::PathBuf, thread};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
-    #[clap(long, short)]
+    /// One of the shards to merge.
     file: PathBuf,
+    /// Output directory for merged file
+    #[clap(long, short)]
+    output_dir: Option<PathBuf>,
 }
 
 impl MergeArgs {
     pub fn merge(self) {
+        // 检查输入文件是否分片
         let shards = LooseShards::from(&*self.file);
         if shards.count() < 2 {
-            println!("Model does not need to be merged.");
+            println!("Model does not need to merge.");
             return;
         }
-
+        // 打开所有分片文件
         let mut files = Vec::new();
         for path in &shards {
             match File::open(&path) {
@@ -32,7 +36,7 @@ impl MergeArgs {
                 }
             }
         }
-
+        // 解析所有分片文件
         let files = thread::scope(|s| {
             files
                 .iter()
@@ -42,10 +46,10 @@ impl MergeArgs {
                 .map(|t| t.join().unwrap())
                 .collect::<Vec<_>>()
         });
-
+        // 扫描并合并元数据键值对和张量信息
         let kvs = files
             .iter()
-            .flat_map(|file| file.meta_kvs().kvs())
+            .flat_map(|file| file.meta_kvs.kvs())
             .filter(|kv| {
                 let key = kv.key();
                 !key.starts_with("split.") && key != "general.alignment"
@@ -53,27 +57,29 @@ impl MergeArgs {
             .collect::<IndexSet<_>>();
         let tensors = files
             .iter()
-            .flat_map(|file| file.tensors_as_indexmap())
+            .enumerate()
+            .flat_map(|(i, file)| file.tensors.iter().map(move |t| (t, i)))
             .collect::<IndexMap<_, _>>();
-
-        let out = File::create(shards.single_file()).unwrap();
+        // 设置输出目录
+        let mut file_format = shards;
+        if let Some(dir) = self.output_dir {
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                panic!("Failed to create output directory: {e}");
+            }
+            file_format.dir = dir;
+        }
+        // 计算对齐
+        let align = files
+            .iter()
+            .map(|file| file.meta_kvs.alignment())
+            .max()
+            .unwrap();
+        // 写入合并后的文件
+        let out = File::create(file_format.single_file()).unwrap();
         let header = GGufFileHeader::new(3, tensors.len() as _, (kvs.len() + 1) as _);
         let mut writer = GGufWriter::new(out, header).unwrap();
 
-        let align = files
-            .iter()
-            .map(|file| file.meta_kvs().alignment())
-            .max()
-            .unwrap();
-
-        writer
-            .write_meta_kv(
-                "general.alignment",
-                GGufMetaDataValueType::U32,
-                (align as u32).to_le_bytes(),
-            )
-            .unwrap();
-
+        writer.write_alignment(align).unwrap();
         for kv in kvs {
             writer
                 .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
@@ -99,12 +105,12 @@ impl MergeArgs {
         paddings.pop();
         paddings[0] = pad(writer.written_bytes(), align);
 
-        for ((t, data), padding) in zip(tensors, paddings) {
+        for ((t, i), padding) in zip(tensors, paddings) {
             for _ in 0..padding {
                 writer.write(0u8).unwrap();
             }
             writer
-                .write_bytes(&data[t.offset()..][..t.nbytes()])
+                .write_bytes(&files[i].data[t.offset()..][..t.nbytes()])
                 .unwrap();
         }
     }

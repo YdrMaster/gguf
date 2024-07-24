@@ -1,29 +1,29 @@
 ﻿use crate::{sizeof, tensor::GGmlType, GGufFileHeader, GGufMetaDataValueType};
+use internal::Internal;
 use std::{
-    io::{BufWriter, Result, Write},
+    io::{Result, Write},
     mem::size_of_val,
     slice::from_raw_parts,
 };
 
-pub struct GGufWriter<T: Write>(BufWriter<T>, usize);
+pub struct GGufWriter<T: Write>(Internal<T>);
 
 impl<T: Write> GGufWriter<T> {
     #[inline]
     pub fn new(writer: T, header: GGufFileHeader) -> Result<Self> {
-        let mut ans = Self(BufWriter::new(writer), 0);
+        let mut ans = Self(Internal::new(writer));
         ans.write_bytes(as_slice(&header))?;
         Ok(ans)
     }
 
     #[inline]
     pub const fn written_bytes(&self) -> usize {
-        self.1
+        self.0.written_bytes()
     }
 
     #[inline]
     pub fn write_bytes(&mut self, val: &[u8]) -> Result<()> {
-        self.1 += val.len();
-        self.0.write_all(val.as_ref())
+        self.0.write_bytes(val)
     }
 
     #[inline]
@@ -43,7 +43,6 @@ impl<T: Write> GGufWriter<T> {
         self.write_bytes(val.as_bytes())
     }
 
-    #[inline]
     pub fn write_meta_kv(
         &mut self,
         key: impl AsRef<str>,
@@ -55,7 +54,14 @@ impl<T: Write> GGufWriter<T> {
         self.write_bytes(val.as_ref())
     }
 
-    #[inline]
+    pub fn write_alignment(&mut self, align: usize) -> Result<()> {
+        self.write_meta_kv(
+            "general.alignment",
+            GGufMetaDataValueType::U32,
+            (align as u32).to_le_bytes(),
+        )
+    }
+
     pub fn write_tensor_info(
         &mut self,
         name: impl AsRef<str>,
@@ -79,4 +85,33 @@ impl<T: Write> GGufWriter<T> {
 #[inline(always)]
 fn as_slice<T: Sized>(val: &T) -> &[u8] {
     unsafe { from_raw_parts(val as *const _ as *const _, sizeof!(T)) }
+}
+
+mod internal {
+    use std::io::{BufWriter, Result, Write};
+
+    pub(super) struct Internal<T: Write>(BufWriter<T>, usize);
+
+    impl<T: Write> Internal<T> {
+        #[inline]
+        pub fn new(writer: T) -> Self {
+            Self(BufWriter::new(writer), 0)
+        }
+
+        #[inline]
+        pub const fn written_bytes(&self) -> usize {
+            self.1
+        }
+
+        #[inline]
+        pub fn write_bytes(&mut self, val: &[u8]) -> Result<()> {
+            self.1 += val.len();
+            self.0.write_all(val.as_ref())
+        }
+
+        #[inline]
+        pub fn flush(&mut self) -> Result<()> {
+            self.0.flush()
+        }
+    }
 }

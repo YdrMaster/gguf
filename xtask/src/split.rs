@@ -1,292 +1,235 @@
 ﻿use crate::{
-    gguf_file::{pad, GGufError, GGufFile},
+    gguf_file::{pad, GGufFile},
     loose_shards::LooseShards,
 };
-use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufMetaKVPairs, GGufWriter};
-use std::{fs::File, path::PathBuf};
-
-const GGUF_VERSION: u32 = 3;
-const GGUF_DEFAULT_ALIGNMENT: usize = 32;
-const LLM_KV_SPLIT_NO: &str = "split.no";
-const LLM_KV_SPLIT_COUNT: &str = "split.count";
-const LLM_KV_SPLIT_TENSORS_COUNT: &str = "split.tensors.count";
+use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufTensorInfo, GGufWriter};
+use std::{
+    fs::File,
+    io::{Result as IoResult, Write},
+    iter::zip,
+    mem::size_of,
+    path::PathBuf,
+};
 
 #[derive(Args, Default)]
 pub struct SplitArgs {
-    #[clap(long)]
-    input: PathBuf,
-    #[clap(long)]
-    output: Option<String>,
-    // default 128 tensors
-    #[clap(long)]
-    split_max_tensors: Option<u64>,
-    #[clap(long)]
-    split_max_size: Option<String>,
-    #[clap(long)]
-    no_tensor_first_split: bool,
-    n_bytes_split: u64,
-    n_split_tensors: u64,
-}
-
-#[derive(Clone)]
-struct GGufFileInfo<'a> {
-    output_path: String,
-    header: GGufFileHeader,
-    meta_kvs: GGufMetaKVPairs<'a>,
-    new_kv_tuples: Vec<(String, GGufMetaDataValueType, u64)>,
-}
-
-impl<'a> GGufFileInfo<'a> {
-    fn new_empty() -> Self {
-        let header = GGufFileHeader::new(GGUF_VERSION, 0, 0);
-        let meta_kvs = GGufMetaKVPairs::new(0);
-        let new_kv_tuples: Vec<(String, GGufMetaDataValueType, u64)> = Vec::new();
-        let output_path = "".to_string();
-        Self {
-            output_path,
-            header,
-            meta_kvs,
-            new_kv_tuples,
-        }
-    }
+    /// File to split
+    file: PathBuf,
+    /// Output directory for splited shards
+    #[clap(long, short)]
+    output_dir: Option<PathBuf>,
+    /// Max count of tensors per shard
+    #[clap(long, short = 't')]
+    max_tensors: Option<usize>,
+    /// Max size in bytes per shard
+    #[clap(long, short = 's')]
+    max_bytes: Option<String>,
+    /// If set, the first shard will not contain any tensor
+    #[clap(long, short)]
+    no_tensor_first: bool,
 }
 
 impl SplitArgs {
     pub fn split(self) {
-        let shards = LooseShards::from(&*self.input);
+        // 解析参数
+        let Self {
+            file,
+            output_dir,
+            max_tensors,
+            max_bytes,
+            no_tensor_first,
+        } = self;
+        let shards = LooseShards::from(&*file);
         if shards.count() > 1 {
             println!("Model has already been splited");
             return;
         }
-        let file = File::open(&self.input)
+        let max_tensors = max_tensors.unwrap_or(usize::MAX);
+        let max_bytes = match max_bytes {
+            Some(s) => match s.trim().as_bytes() {
+                [num @ .., b'G'] => parse_size_num(num, 30),
+                [num @ .., b'M'] => parse_size_num(num, 20),
+                [num @ .., b'K'] => parse_size_num(num, 10),
+                num => parse_size_num(num, 0),
+            }
+            .unwrap_or_else(|| panic!("Invalid max bytes format: \"{s}\"")),
+            None => usize::MAX,
+        };
+        // 打开文件
+        let file = File::open(&file)
             .map_err(|e| {
-                println!("Failed to open");
-                eprintln!("  file: {}", self.input.display());
+                eprintln!("Failed to open");
+                eprintln!("  file: {}", file.display());
                 eprintln!("  cause: {e}");
             })
             .unwrap();
         let mmap = unsafe { memmap2::Mmap::map(&file).unwrap() };
-        let ctx_gguf: GGufFile = GGufFile::new(&mmap).unwrap();
-
-        let align = ctx_gguf.meta_kvs().alignment();
-        let ggufs = self.split_strategy(ctx_gguf.clone()).unwrap();
-
-        let tensors = ctx_gguf.tensors_as_indexmap();
-        let mut tensor_iter: indexmap::map::Iter<ggus::GGufTensorInfo, &[u8]> = tensors.iter();
-
-        for gguf in ggufs {
-            let out = File::create(gguf.output_path).unwrap();
-
-            let header = gguf.header;
-            let tensor_count: u64 = header.tensor_count;
-            let mut writer = GGufWriter::new(out, header).unwrap();
-
-            let kvs = gguf.meta_kvs.kvs();
-            for kv in kvs {
-                writer
-                    .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
-                    .unwrap();
-            }
-
-            for kv in gguf.new_kv_tuples {
-                match kv.1 {
-                    GGufMetaDataValueType::U16 => writer
-                        .write_meta_kv(kv.0, kv.1, (kv.2 as u16).to_le_bytes())
-                        .unwrap(),
-                    GGufMetaDataValueType::I32 => writer
-                        .write_meta_kv(kv.0, kv.1, (kv.2 as i32).to_le_bytes())
-                        .unwrap(),
-                    _ => (),
-                }
-            }
-
-            let mut cursor = 0;
-            let mut paddings = Vec::with_capacity(tensor_count as usize + 1);
-            paddings.push(0);
-
-            let mut tensor_info_iter: indexmap::map::Iter<ggus::GGufTensorInfo, &[u8]> =
-                tensor_iter.clone();
-
-            for _ in 0..tensor_count {
-                let (tensor_info, _) = tensor_info_iter.next().unwrap();
-
-                writer
-                    .write_tensor_info(
-                        tensor_info.name(),
-                        tensor_info.shape(),
-                        tensor_info.ggml_type(),
-                        cursor,
-                    )
-                    .unwrap();
-
-                cursor += tensor_info.nbytes();
-                let padding = pad(cursor, align);
-
-                cursor += padding;
-                paddings.push(padding);
-            }
-
-            paddings.pop();
-            if !paddings.is_empty() {
-                paddings[0] = pad(writer.written_bytes(), GGUF_DEFAULT_ALIGNMENT);
-            }
-
-            for padding in paddings {
-                for _ in 0..padding {
-                    writer.write(0u8).unwrap();
-                }
-
-                let (t, data) = tensor_iter.next().unwrap();
-                writer
-                    .write_bytes(&data[t.offset()..][..t.nbytes()])
-                    .unwrap();
-            }
-
-            let end_padding = pad(writer.written_bytes(), GGUF_DEFAULT_ALIGNMENT);
-            for _ in 0..end_padding {
-                writer.write(0u8).unwrap();
-            }
+        let num_tensors =
+            unsafe { mmap.as_ptr().cast::<GGufFileHeader>().read() }.tensor_count as usize;
+        if mmap.len() <= max_bytes && num_tensors <= max_tensors {
+            println!("Model is already small enough");
+            return;
         }
-    }
-
-    fn split_strategy(mut self, ctx_gguf: GGufFile) -> Result<Vec<GGufFileInfo>, GGufError> {
-        use GGufMetaDataValueType as ty;
-        match (self.split_max_size.clone(), self.split_max_tensors) {
-            (Some(_), Some(_)) => {
-                return Err(GGufError::SplitModeRepeated);
-            }
-            (Some(max_size), None) => {
-                fn parse_split_max_size(split_max_size: String) -> Option<u64> {
-                    if split_max_size.is_empty() {
-                        return None;
-                    }
-                    let symbol = split_max_size.chars().last().unwrap();
-                    let len = split_max_size.len();
-                    let size = split_max_size[..len - 1].parse::<u64>();
-                    match size {
-                        Ok(num) => {
-                            if symbol == 'M' {
-                                Some(num * 1000 * 1000)
-                            } else if symbol == 'G' {
-                                Some(num * 1000 * 1000 * 1000)
-                            } else {
-                                None
-                            }
-                        }
-                        Err(_) => None,
+        // 解析文件
+        let source = GGufFile::new(&mmap).unwrap();
+        // 生成分片方案
+        let mut file_format = shards;
+        let first_size = source.header.nbytes() + source.meta_kvs.nbytes();
+        let others_size = others_size();
+        let mut shards = vec![ShardMeta {
+            n_tensors: 0,
+            n_bytes: first_size,
+        }];
+        for info in source.tensors.iter() {
+            let tensor_size = tensor_size(&info);
+            match &mut *shards {
+                [_] if no_tensor_first => shards.push(ShardMeta {
+                    n_tensors: 1,
+                    n_bytes: others_size + tensor_size,
+                }),
+                [.., last] => {
+                    if last.n_tensors < max_tensors && last.n_bytes + tensor_size < max_bytes {
+                        last.n_tensors += 1;
+                        last.n_bytes += tensor_size;
+                    } else {
+                        shards.push(ShardMeta {
+                            n_tensors: 1,
+                            n_bytes: others_size + tensor_size,
+                        });
                     }
                 }
-
-                match parse_split_max_size(max_size) {
-                    Some(size) => {
-                        self.n_bytes_split = size;
-                    }
-                    None => {
-                        // 错误的格式
-                        return Err(GGufError::FileSizeError);
-                    }
+                [] => unreachable!(),
+            }
+        }
+        // 准备写入
+        let filter_split = source
+            .meta_kvs
+            .keys()
+            .filter(|k| !k.starts_with("split."))
+            .count();
+        let align = source.meta_kvs.alignment();
+        let tensors = source.tensors.iter().collect::<Vec<_>>();
+        file_format.shards_count = shards.len();
+        if let Some(dir) = output_dir {
+            if let Err(e) = std::fs::create_dir_all(&dir) {
+                panic!("Failed to create output directory: {e}");
+            }
+            file_format.dir = dir;
+        }
+        // 写入第一个分片
+        {
+            let n_tensors = shards[0].n_tensors;
+            let first = File::create(file_format.get(0).unwrap()).unwrap();
+            let header = GGufFileHeader::new(3, n_tensors as _, filter_split as _);
+            let mut writer = GGufWriter::new(first, header).unwrap();
+            for kv in source.meta_kvs.kvs() {
+                if !kv.key().starts_with("split.") {
+                    writer
+                        .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
+                        .unwrap();
                 }
             }
-            _ => match self.split_max_tensors {
-                Some(tensors) => {
-                    self.n_bytes_split = 0;
-                    self.n_split_tensors = tensors;
-                }
-                None => {
-                    self.n_bytes_split = 0;
-                    self.n_split_tensors = 128;
-                }
-            },
+            write_tensors(&mut writer, &tensors[..n_tensors], align, &source);
         }
+        // 写入其他分片
+        let mut used_tensors = shards[0].n_tensors;
+        for (i, shard) in shards.into_iter().enumerate().skip(1) {
+            let n_tensors = shard.n_tensors;
+            let file = File::create(&file_format.get(i).unwrap()).unwrap();
+            let header = GGufFileHeader::new(3, n_tensors as _, 1);
+            let mut writer = GGufWriter::new(file, header).unwrap();
+            writer.write_alignment(align).unwrap();
 
-        let tensors = ctx_gguf.tensors_as_indexmap();
-
-        let mut ggufs: Vec<GGufFileInfo> = Vec::new();
-        let n_tensors: u64 = ctx_gguf.header().tensor_count;
-
-        let setup_gguf_file = |i_split: u64, n_tensors: u64| {
-            let mut gguf_file = GGufFileInfo::new_empty();
-            gguf_file
-                .new_kv_tuples
-                .push((LLM_KV_SPLIT_NO.to_string(), ty::U16, i_split));
-            gguf_file
-                .new_kv_tuples
-                .push((LLM_KV_SPLIT_COUNT.to_string(), ty::U16, 0));
-            gguf_file.new_kv_tuples.push((
-                LLM_KV_SPLIT_TENSORS_COUNT.to_string(),
-                ty::I32,
-                n_tensors,
-            ));
-            gguf_file.header.metadata_kv_count += 3;
-            gguf_file
-        };
-
-        let mut i_split: u64 = 1;
-        let mut gguf_file = setup_gguf_file(i_split, n_tensors);
-        gguf_file.meta_kvs = ctx_gguf.meta_kvs().clone();
-
-        gguf_file.header.metadata_kv_count += ctx_gguf.header().metadata_kv_count;
-
-        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_NO) {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
-        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_COUNT) {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
-        if gguf_file.meta_kvs.remove(LLM_KV_SPLIT_TENSORS_COUNT) {
-            gguf_file.header.metadata_kv_count -= 1;
-        }
-
-        if self.no_tensor_first_split {
-            ggufs.push(gguf_file);
-            gguf_file = setup_gguf_file(i_split, n_tensors);
-        }
-
-        let mut curr_tensors_size: u64 = 0;
-        let mut i_tensor = 0;
-
-        for t in tensors.keys() {
-            i_tensor += 1;
-            let tensor_size = t.nbytes();
-            let n_bytes = (pad(tensor_size, GGUF_DEFAULT_ALIGNMENT) + tensor_size) as u64;
-            let next_tensor_size = curr_tensors_size + n_bytes;
-
-            if self.should_split(i_tensor, n_tensors, next_tensor_size) {
-                ggufs.push(gguf_file.clone());
-                i_tensor = 0;
-                i_split += 1;
-                gguf_file = setup_gguf_file(i_split, n_tensors);
-                curr_tensors_size = n_bytes;
-            } else {
-                curr_tensors_size = next_tensor_size;
-            }
-            gguf_file.header.tensor_count += 1;
-        }
-
-        ggufs.push(gguf_file);
-
-        let tensor_count = ggufs.len() as u64;
-        let output_path = &self.output.unwrap();
-        let mut index = 0;
-        while index < ggufs.len() {
-            ggufs[index].output_path = format!(
-                "{}-{:05}-of-{:05}.gguf",
-                output_path,
-                index + 1,
-                ggufs.len()
+            write_tensors(
+                &mut writer,
+                &tensors[used_tensors..][..n_tensors],
+                align,
+                &source,
             );
-            ggufs[index].new_kv_tuples[1] = (LLM_KV_SPLIT_COUNT.to_string(), ty::U16, tensor_count);
-            index += 1;
+            used_tensors += n_tensors;
         }
+    }
+}
 
-        Ok(ggufs)
+fn parse_size_num(num: &[u8], k: usize) -> Option<usize> {
+    std::str::from_utf8(num)
+        .ok()?
+        .parse::<usize>()
+        .ok()
+        .map(|n| n << k)
+}
+
+struct NWriter;
+impl Write for NWriter {
+    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> IoResult<()> {
+        Ok(())
+    }
+}
+
+fn others_size() -> usize {
+    let mut writer = GGufWriter::new(NWriter, GGufFileHeader::new(3, 0, 0)).unwrap();
+    writer
+        .write_meta_kv(
+            "general.alignment",
+            GGufMetaDataValueType::U32,
+            0u32.to_le_bytes(),
+        )
+        .unwrap();
+    writer.written_bytes()
+}
+
+fn tensor_size(info: &GGufTensorInfo) -> usize {
+    let mut writer = GGufWriter::new(NWriter, GGufFileHeader::new(3, 0, 0)).unwrap();
+    writer
+        .write_tensor_info(info.name(), info.shape(), info.ggml_type(), info.offset())
+        .unwrap();
+    writer.written_bytes() + info.nbytes() - size_of::<GGufFileHeader>()
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ShardMeta {
+    n_tensors: usize,
+    n_bytes: usize,
+}
+
+fn write_tensors<T: Write>(
+    writer: &mut GGufWriter<T>,
+    tensors: &[GGufTensorInfo],
+    align: usize,
+    source: &GGufFile,
+) {
+    if tensors.is_empty() {
+        return;
     }
 
-    fn should_split(&self, i_tensor: u64, n_tensors: u64, next_size: u64) -> bool {
-        if self.n_bytes_split > 0 {
-            next_size > self.n_bytes_split
-        } else {
-            i_tensor > 0 && i_tensor < n_tensors && i_tensor % self.n_split_tensors == 0
+    let mut cursor = 0;
+    let mut paddings = Vec::with_capacity(tensors.len() + 1);
+    paddings.push(0);
+
+    for t in tensors {
+        writer
+            .write_tensor_info(t.name(), t.shape(), t.ggml_type(), cursor)
+            .unwrap();
+
+        cursor += t.nbytes();
+        let padding = pad(cursor, align);
+
+        cursor += padding;
+        paddings.push(padding);
+    }
+
+    paddings.pop();
+    paddings[0] = pad(writer.written_bytes(), align);
+
+    for (t, padding) in zip(tensors, paddings) {
+        for _ in 0..padding {
+            writer.write(0u8).unwrap();
         }
+        writer
+            .write_bytes(&source.data[t.offset()..][..t.nbytes()])
+            .unwrap();
     }
 }

@@ -4,11 +4,11 @@
 };
 
 pub(crate) struct LooseShards {
-    dir: PathBuf,
+    pub dir: PathBuf,
     prefix: String,
     extension: OsString,
-    shards_count: usize,
-    shards_format: usize,
+    pub shards_count: usize,
+    pub shards_format: usize,
 }
 
 impl LooseShards {
@@ -21,9 +21,27 @@ impl LooseShards {
     pub fn single_file(&self) -> PathBuf {
         self.dir.join(&self.prefix).with_extension(&self.extension)
     }
+
+    #[inline]
+    pub fn get(&self, i: usize) -> Option<PathBuf> {
+        Some(i)
+            .filter(|i| *i < self.shards_count)
+            .map(|i| match self.shards_count {
+                0 => self.single_file(),
+                n => self
+                    .dir
+                    .join(format!(
+                        "{}-{:0fmt$}-of-{n:0fmt$}",
+                        self.prefix,
+                        i + 1,
+                        fmt = self.shards_format
+                    ))
+                    .with_extension(&self.extension),
+            })
+    }
 }
 
-impl From<&'_ Path> for LooseShards {
+impl From<&Path> for LooseShards {
     fn from(file: &Path) -> Self {
         let dir = file.parent().unwrap().to_path_buf();
         let extension = file.extension().unwrap_or_default().to_os_string();
@@ -48,7 +66,7 @@ impl From<&'_ Path> for LooseShards {
             prefix: stem.to_string(),
             extension,
             shards_count: 0,
-            shards_format: 0,
+            shards_format: 5,
         }
     }
 }
@@ -68,33 +86,10 @@ impl<'a> Iterator for Iter<'a> {
     type Item = PathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.0.shards_count {
-            0 => {
-                if self.1 == 0 {
-                    self.1 += 1;
-                    Some(self.0.single_file())
-                } else {
-                    None
-                }
-            }
-            n => {
-                if self.1 < n {
-                    self.1 += 1;
-                    Some(
-                        self.0
-                            .dir
-                            .join(format!(
-                                "{}-{:0fmt$}-of-{n:0fmt$}",
-                                self.0.prefix,
-                                self.1,
-                                fmt = self.0.shards_format
-                            ))
-                            .with_extension(&self.0.extension),
-                    )
-                } else {
-                    None
-                }
-            }
+        let ans = self.0.get(self.1);
+        if ans.is_some() {
+            self.1 += 1;
         }
+        ans
     }
 }
