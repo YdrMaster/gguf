@@ -1,9 +1,9 @@
-﻿use crate::{loose_shards::LooseShards, ERR, YES};
+﻿use crate::{loose_shards::LooseShards, split_keys, ERR, YES};
 use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
     GGufTensors,
 };
-use std::{fmt, fs::File, path::PathBuf};
+use std::{collections::HashSet, fmt, fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
@@ -12,19 +12,45 @@ pub struct ShowArgs {
     /// If set, show all shards in the directory
     #[clap(long)]
     shards: bool,
+    /// How many elements to show in arrays, `all` for all elements
+    #[clap(long, short = 'n', default_value = "8")]
+    array_detail: String,
+    /// Meta to show (split with `,`)
+    #[clap(long, short = 'm')]
+    filter_meta: Option<String>,
+    /// Tensors to show (split with `,`)
+    #[clap(long, short = 't')]
+    filter_tensor: Option<String>,
 }
 
 struct Failed;
 
 impl ShowArgs {
     pub fn show(self) {
-        let files = if self.shards {
-            LooseShards::from(&*self.file)
+        let Self {
+            file,
+            shards,
+            array_detail,
+            filter_meta,
+            filter_tensor,
+        } = self;
+
+        let detail = match array_detail.trim().to_lowercase().as_str() {
+            "all" => usize::MAX,
+            s => s
+                .parse()
+                .expect("Invalid array detail, should be an integer or `all`"),
+        };
+        let filter_meta = split_keys(&filter_meta);
+        let filter_tensor = split_keys(&filter_tensor);
+
+        let files = if shards {
+            LooseShards::from(&*file)
                 .into_iter()
                 .filter(|p| p.is_file())
                 .collect::<Vec<_>>()
-        } else if self.file.is_file() {
-            vec![self.file]
+        } else if file.is_file() {
+            vec![file]
         } else {
             vec![]
         };
@@ -64,7 +90,7 @@ impl ShowArgs {
                     continue;
                 }
             };
-            if let Err(Failed) = show_meta_kvs(&kvs) {
+            if show_meta_kvs(&kvs, &filter_meta, detail).is_err() {
                 println!();
                 continue;
             }
@@ -78,7 +104,7 @@ impl ShowArgs {
                     continue;
                 }
             };
-            let _ = show_tensors(&tensors);
+            let _ = show_tensors(&tensors, &filter_tensor);
             println!();
         }
     }
@@ -129,11 +155,24 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
     Ok(())
 }
 
-fn show_meta_kvs(kvs: &GGufMetaKVPairs) -> Result<(), Failed> {
-    if let Some(width) = kvs.keys().map(|k| k.len()).max() {
+fn show_meta_kvs<'a>(
+    kvs: &GGufMetaKVPairs,
+    filter: &Option<HashSet<&'a str>>,
+    detail: usize,
+) -> Result<(), Failed> {
+    let kvs = filter.as_ref().map_or_else(
+        || kvs.kvs().collect::<Vec<_>>(),
+        |to_keep| {
+            kvs.kvs()
+                .filter(move |m| to_keep.contains(m.key()))
+                .collect::<Vec<_>>()
+        },
+    );
+
+    if let Some(width) = kvs.iter().map(|kv| kv.key().len()).max() {
         show_title("Meta KV");
-        for kv in kvs.kvs() {
-            show_meta_kv(kv, width)?;
+        for kv in kvs {
+            show_meta_kv(kv, width, detail)?;
         }
         println!();
     }
@@ -141,12 +180,12 @@ fn show_meta_kvs(kvs: &GGufMetaKVPairs) -> Result<(), Failed> {
     Ok(())
 }
 
-fn show_meta_kv(kv: GGufMetaKV, width: usize) -> Result<(), Failed> {
+fn show_meta_kv(kv: GGufMetaKV, width: usize, detail: usize) -> Result<(), Failed> {
     let key = kv.key();
     let ty = kv.ty();
     let mut reader = kv.value_reader();
     let mut buf = String::new();
-    match fmt_meta_val(&mut reader, ty, 1, &mut buf) {
+    match fmt_meta_val(&mut reader, ty, 1, detail, &mut buf) {
         Ok(()) => {
             println!("{YES}{key:·<width$} {buf}");
             Ok(())
@@ -162,6 +201,7 @@ fn fmt_meta_val<'a>(
     reader: &mut GGufReader<'a>,
     ty: GGufMetaDataValueType,
     len: usize,
+    detail: usize,
     buf: &mut String,
 ) -> Result<(), GGufReadError<'a>> {
     struct MultiLines<'a>(&'a str);
@@ -212,34 +252,47 @@ fn fmt_meta_val<'a>(
                 }
                 T::Array => {
                     let (ty, len) = reader.read_arr_header()?;
-                    fmt_meta_val(reader, ty, len, buf)?;
+                    fmt_meta_val(reader, ty, len, detail, buf)?;
                 }
             }
         }
-        _ if len <= 8 => {
+        _ if len <= detail => {
             buf.push('[');
             for i in 0..len {
                 if i > 0 {
                     buf.push_str(", ");
                 }
-                fmt_meta_val(reader, ty, 1, buf)?;
+                fmt_meta_val(reader, ty, 1, detail, buf)?;
             }
             buf.push(']');
         }
         _ => {
             buf.push('[');
-            for _ in 0..8 {
-                fmt_meta_val(reader, ty, 1, buf)?;
+            for _ in 0..detail {
+                fmt_meta_val(reader, ty, 1, detail, buf)?;
                 buf.push_str(", ");
             }
-            buf.push_str(&format!("...({} more)]", len - 8));
+            buf.push_str(&format!("...({} more)]", len - detail));
         }
     }
     Ok(())
 }
 
-fn show_tensors(tensors: &GGufTensors) -> Result<(), Failed> {
-    if let Some(name_width) = tensors.names().map(|k| k.len()).max() {
+fn show_tensors<'a>(
+    tensors: &GGufTensors,
+    filter: &Option<HashSet<&'a str>>,
+) -> Result<(), Failed> {
+    let tensors = filter.as_ref().map_or_else(
+        || tensors.iter().collect::<Vec<_>>(),
+        |to_keep| {
+            tensors
+                .iter()
+                .filter(move |t| to_keep.contains(t.name()))
+                .collect::<Vec<_>>()
+        },
+    );
+
+    if let Some(name_width) = tensors.iter().map(|t| t.name().len()).max() {
         show_title("Tensors");
         let tensors = tensors.iter().collect::<Vec<_>>();
         let off_width = tensors.last().unwrap().offset().to_string().len() + 1;
