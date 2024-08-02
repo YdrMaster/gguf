@@ -1,14 +1,10 @@
 ﻿use crate::{
-    file_info::print_file_info,
-    gguf_file::{pad, GGufFile},
-    loose_shards::LooseShards,
-    YES,
+    file_info::print_file_info, gguf_file::GGufFile, loose_shards::LooseShards, write_tensors, YES,
 };
 use ggus::{GGufFileHeader, GGufTensorInfo, GGufWriter};
 use std::{
     fs::File,
     io::{Result as IoResult, Write},
-    iter::zip,
     mem::size_of,
     path::PathBuf,
 };
@@ -131,7 +127,7 @@ impl SplitArgs {
                         .unwrap();
                 }
             }
-            write_tensors(&mut writer, &tensors[..n_tensors], align, &source);
+            write_tensors(&mut writer, &tensors[..n_tensors], align, source.data);
 
             println!("{YES}Shard is written to: \"{}\"", path.display());
             print_file_info(n_tensors, filter_split, writer.written_bytes());
@@ -149,7 +145,7 @@ impl SplitArgs {
                 &mut writer,
                 &tensors[used_tensors..][..n_tensors],
                 align,
-                &source,
+                source.data,
             );
             used_tensors += n_tensors;
 
@@ -195,43 +191,4 @@ fn tensor_size(info: &GGufTensorInfo) -> usize {
 struct ShardMeta {
     n_tensors: usize,
     n_bytes: usize,
-}
-
-fn write_tensors<T: Write>(
-    writer: &mut GGufWriter<T>,
-    tensors: &[GGufTensorInfo],
-    align: usize,
-    source: &GGufFile,
-) {
-    if tensors.is_empty() {
-        return;
-    }
-
-    let mut cursor = 0;
-    let mut paddings = Vec::with_capacity(tensors.len() + 1);
-    paddings.push(0);
-
-    for t in tensors {
-        writer
-            .write_tensor_info(t.name(), t.shape(), t.ggml_type(), cursor)
-            .unwrap();
-
-        cursor += t.nbytes();
-        let padding = pad(cursor, align);
-
-        cursor += padding;
-        paddings.push(padding);
-    }
-
-    paddings.pop();
-    paddings[0] = pad(writer.written_bytes(), align);
-
-    for (t, padding) in zip(tensors, paddings) {
-        for _ in 0..padding {
-            writer.write(0u8).unwrap();
-        }
-        writer
-            .write_bytes(&source.data[t.offset()..][..t.nbytes()])
-            .unwrap();
-    }
 }
