@@ -2,14 +2,13 @@ mod file_info;
 mod gguf_file;
 mod loose_shards;
 mod merge;
+mod name_pattern;
 mod show;
 mod split;
 
 #[macro_use]
 extern crate clap;
-
 use clap::Parser;
-use std::collections::HashSet;
 
 fn main() {
     use Commands::*;
@@ -37,12 +36,3 @@ enum Commands {
 
 const YES: &str = "✔️  ";
 const ERR: &str = "❌  ";
-
-fn split_keys(arg: &Option<String>) -> Option<HashSet<&str>> {
-    arg.as_ref().map(|s| {
-        s.split(',')
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect::<HashSet<_>>()
-    })
-}

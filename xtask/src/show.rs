@@ -1,9 +1,10 @@
-﻿use crate::{loose_shards::LooseShards, split_keys, ERR, YES};
+﻿use crate::{loose_shards::LooseShards, name_pattern::compile_patterns, ERR, YES};
 use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
     GGufTensors,
 };
-use std::{collections::HashSet, fmt, fs::File, path::PathBuf};
+use regex::Regex;
+use std::{fmt, fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
@@ -15,12 +16,12 @@ pub struct ShowArgs {
     /// How many elements to show in arrays, `all` for all elements
     #[clap(long, short = 'n', default_value = "8")]
     array_detail: String,
-    /// Meta to show (split with `,`)
-    #[clap(long, short = 'm')]
-    filter_meta: Option<String>,
-    /// Tensors to show (split with `,`)
-    #[clap(long, short = 't')]
-    filter_tensor: Option<String>,
+    /// Meta to show
+    #[clap(long, short = 'm', default_value = "*")]
+    filter_meta: String,
+    /// Tensors to show
+    #[clap(long, short = 't', default_value = "*")]
+    filter_tensor: String,
 }
 
 struct Failed;
@@ -41,8 +42,8 @@ impl ShowArgs {
                 .parse()
                 .expect("Invalid array detail, should be an integer or `all`"),
         };
-        let filter_meta = split_keys(&filter_meta);
-        let filter_tensor = split_keys(&filter_tensor);
+        let filter_meta = compile_patterns(&filter_meta);
+        let filter_tensor = compile_patterns(&filter_tensor);
 
         let files = if shards {
             LooseShards::from(&*file)
@@ -155,19 +156,11 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
     Ok(())
 }
 
-fn show_meta_kvs<'a>(
-    kvs: &GGufMetaKVPairs,
-    filter: &Option<HashSet<&'a str>>,
-    detail: usize,
-) -> Result<(), Failed> {
-    let kvs = filter.as_ref().map_or_else(
-        || kvs.kvs().collect::<Vec<_>>(),
-        |to_keep| {
-            kvs.kvs()
-                .filter(move |m| to_keep.contains(m.key()))
-                .collect::<Vec<_>>()
-        },
-    );
+fn show_meta_kvs<'a>(kvs: &GGufMetaKVPairs, filter: &Regex, detail: usize) -> Result<(), Failed> {
+    let kvs = kvs
+        .kvs()
+        .filter(move |m| filter.is_match(m.key()))
+        .collect::<Vec<_>>();
 
     if let Some(width) = kvs.iter().map(|kv| kv.key().len()).max() {
         show_title("Meta KV");
@@ -278,19 +271,11 @@ fn fmt_meta_val<'a>(
     Ok(())
 }
 
-fn show_tensors<'a>(
-    tensors: &GGufTensors,
-    filter: &Option<HashSet<&'a str>>,
-) -> Result<(), Failed> {
-    let tensors = filter.as_ref().map_or_else(
-        || tensors.iter().collect::<Vec<_>>(),
-        |to_keep| {
-            tensors
-                .iter()
-                .filter(move |t| to_keep.contains(t.name()))
-                .collect::<Vec<_>>()
-        },
-    );
+fn show_tensors<'a>(tensors: &GGufTensors, filter: &Regex) -> Result<(), Failed> {
+    let tensors = tensors
+        .iter()
+        .filter(move |t| filter.is_match(t.name()))
+        .collect::<Vec<_>>();
 
     if let Some(name_width) = tensors.iter().map(|t| t.name().len()).max() {
         show_title("Tensors");
