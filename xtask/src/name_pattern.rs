@@ -1,6 +1,7 @@
 ﻿use regex::Regex;
 use std::{borrow::Cow, fmt, sync::OnceLock};
 
+#[inline]
 pub fn compile_patterns(patterns: &str) -> Regex {
     Regex::new(&format!("{}", Patterns(patterns))).unwrap()
 }
@@ -13,14 +14,14 @@ impl fmt::Display for Patterns<'_> {
         // 匹配任何标识符、点、星号的组合
         let patterns = REGEX
             .get_or_init(|| Regex::new(r"[\w*.]+").unwrap())
-            .captures_iter(self.0);
+            .find_iter(self.0);
 
         let mut patterns = patterns.into_iter();
         if let Some(pattern) = patterns.next() {
-            write!(f, "{}", Pattern(&pattern[0]))?;
+            write!(f, "{}", Pattern(pattern.as_str()))?;
         }
         for pattern in patterns {
-            write!(f, "|{}", Pattern(&pattern[0]))?;
+            write!(f, "|{}", Pattern(pattern.as_str()))?;
         }
         Ok(())
     }
