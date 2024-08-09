@@ -1,8 +1,5 @@
-﻿use crate::{
-    file_info::print_file_info, gguf_file::GGufFile, name_pattern::compile_patterns, write_tensors,
-    YES,
-};
-use ggus::{GGufFileHeader, GGufWriter};
+﻿use crate::{file_info::print_file_info, gguf_file::GGufFile, name_pattern::compile_patterns, YES};
+use ggus::{GGufFileHeader, GGufMetaWriter};
 use std::{fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
@@ -68,15 +65,19 @@ impl FilterArgs {
         out = out.with_extension("part.gguf");
 
         let header = GGufFileHeader::new(3, tensors.len() as _, meta_kvs.len() as _);
-        let mut writer = GGufWriter::new(File::create(&out).unwrap(), header).unwrap();
+        let mut writer = GGufMetaWriter::new(File::create(&out).unwrap(), header).unwrap();
         for kv in &meta_kvs {
             writer
                 .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
                 .unwrap();
         }
-        write_tensors(&mut writer, &tensors, file.meta_kvs.alignment(), file.data);
+        let mut writer = writer.finish();
+        for t in &tensors {
+            writer.write_tensor(t, file.data).unwrap();
+        }
+        let n_bytes = writer.finish().unwrap();
 
         println!("{YES}Shard is written to: \"{}\"", out.display());
-        print_file_info(tensors.len(), meta_kvs.len(), writer.written_bytes());
+        print_file_info(tensors.len(), meta_kvs.len(), n_bytes);
     }
 }

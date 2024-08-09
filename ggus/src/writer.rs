@@ -1,4 +1,6 @@
-﻿use crate::{sizeof, tensor::GGmlType, GGufFileHeader, GGufMetaDataValueType, GENERAL_ALIGNMENT};
+﻿use crate::{
+    GGufFileHeader, GGufMetaDataValueType, GGufTensorInfo, DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT,
+};
 use internal::Internal;
 use std::{
     io::{Result, Write},
@@ -6,7 +8,197 @@ use std::{
     slice::from_raw_parts,
 };
 
-pub struct GGufWriter<T: Write>(Internal<T>);
+pub struct GGufMetaWriter<T: Write> {
+    writer: GGufWriter<T>,
+    alignment: usize,
+}
+
+pub struct GGufTensorWriter<'t, T: Write> {
+    writer: GGufWriter<T>,
+    alignment: usize,
+    data: Vec<&'t [u8]>,
+    offset: usize,
+}
+
+pub struct GGufSimulator {
+    writer: GGufWriter<NWrite>,
+    alignment: usize,
+    direct: usize,
+    data: Vec<usize>,
+}
+
+impl<T: Write> GGufMetaWriter<T> {
+    #[inline]
+    pub fn new(writer: T, header: GGufFileHeader) -> Result<Self> {
+        Ok(Self {
+            writer: GGufWriter::new(writer, header)?,
+            alignment: DEFAULT_ALIGNMENT,
+        })
+    }
+
+    #[inline]
+    pub fn write_alignment(&mut self, align: usize) -> Result<()> {
+        self.write_meta_kv(
+            GENERAL_ALIGNMENT,
+            GGufMetaDataValueType::U32,
+            (align as u32).to_le_bytes(),
+        )
+    }
+
+    pub fn write_meta_kv(
+        &mut self,
+        key: impl AsRef<str>,
+        ty: GGufMetaDataValueType,
+        val: impl AsRef<[u8]>,
+    ) -> Result<()> {
+        if key.as_ref() == GENERAL_ALIGNMENT {
+            let &[a, b, c, d] = val.as_ref() else {
+                use std::io::{Error, ErrorKind::InvalidData};
+                return Err(Error::new(InvalidData, "general.alignment must be an u32"));
+            };
+            self.alignment = u32::from_le_bytes([a, b, c, d]) as _;
+        }
+
+        self.writer.write_str(key)?;
+        self.writer.write(ty)?;
+        self.writer.write_bytes(val.as_ref())
+    }
+
+    #[inline]
+    pub fn finish<'t>(self) -> GGufTensorWriter<'t, T> {
+        GGufTensorWriter {
+            writer: self.writer,
+            alignment: self.alignment,
+            data: Vec::new(),
+            offset: 0,
+        }
+    }
+}
+
+impl<'t, T: Write> GGufTensorWriter<'t, T> {
+    pub fn write_tensor(&mut self, info: &GGufTensorInfo, data: &'t [u8]) -> Result<()> {
+        self.writer.write_str(info.name())?;
+
+        let shape = info.shape();
+        self.writer.write(shape.len() as u32)?;
+        self.writer.write_bytes(as_slice(shape))?;
+        self.writer.write(info.ggml_type())?;
+
+        self.offset += pad(self.offset, self.alignment);
+        self.writer.write(self.offset as u64)?;
+
+        let len = info.nbytes();
+        self.offset += len;
+        self.data.push(&data[info.offset()..][..len]);
+
+        Ok(())
+    }
+
+    pub fn finish(self) -> Result<usize> {
+        let Self {
+            mut writer,
+            alignment,
+            data,
+            ..
+        } = self;
+
+        for data in data {
+            for _ in 0..pad(writer.written_bytes(), alignment) {
+                writer.write(0u8)?;
+            }
+            writer.write_bytes(data)?;
+        }
+        Ok(writer.written_bytes())
+    }
+}
+
+impl Default for GGufSimulator {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl GGufSimulator {
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            writer: GGufWriter::new(NWrite, GGufFileHeader::default()).unwrap(),
+            alignment: DEFAULT_ALIGNMENT,
+            direct: 0,
+            data: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub fn write(&mut self, n: usize) {
+        self.direct += n;
+    }
+
+    #[inline]
+    pub fn write_alignment(&mut self) {
+        self.write_meta_kv(
+            GENERAL_ALIGNMENT,
+            GGufMetaDataValueType::U32,
+            (DEFAULT_ALIGNMENT as u32).to_le_bytes(),
+        )
+    }
+
+    pub fn write_meta_kv(
+        &mut self,
+        key: impl AsRef<str>,
+        ty: GGufMetaDataValueType,
+        val: impl AsRef<[u8]>,
+    ) {
+        if key.as_ref() == GENERAL_ALIGNMENT {
+            let &[a, b, c, d] = val.as_ref() else {
+                panic!("general.alignment must be an u32")
+            };
+            self.alignment = u32::from_le_bytes([a, b, c, d]) as _;
+        }
+
+        self.writer.write_str(key).unwrap();
+        self.writer.write(ty).unwrap();
+        self.writer.write_bytes(val.as_ref()).unwrap();
+    }
+
+    pub fn write_tensor(&mut self, info: &GGufTensorInfo) {
+        self.writer.write_str(info.name()).unwrap();
+
+        let shape = info.shape();
+        self.writer.write(shape.len() as u32).unwrap();
+        self.writer.write_bytes(as_slice(shape)).unwrap();
+
+        self.writer.write(info.ggml_type()).unwrap();
+        self.writer.write(0u64).unwrap();
+
+        self.data.push(info.nbytes());
+    }
+
+    pub fn written_bytes(&self) -> usize {
+        let mut total = self.writer.written_bytes() + self.direct;
+        for len in &self.data {
+            total += pad(total, self.alignment);
+            total += len;
+        }
+        total
+    }
+}
+
+struct NWrite;
+
+impl Write for NWrite {
+    #[inline(always)]
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        Ok(buf.len())
+    }
+    #[inline(always)]
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+struct GGufWriter<T: Write>(Internal<T>);
 
 impl<T: Write> GGufWriter<T> {
     #[inline]
@@ -32,59 +224,21 @@ impl<T: Write> GGufWriter<T> {
     }
 
     #[inline]
-    pub fn write_bool(&mut self, val: bool) -> Result<()> {
-        self.write_bytes(if val { &[1] } else { &[0] })
-    }
-
-    #[inline]
     pub fn write_str(&mut self, val: impl AsRef<str>) -> Result<()> {
         let val = val.as_ref();
         self.write_bytes(as_slice(&(val.len() as u64)))?;
         self.write_bytes(val.as_bytes())
     }
-
-    pub fn write_meta_kv(
-        &mut self,
-        key: impl AsRef<str>,
-        ty: GGufMetaDataValueType,
-        val: impl AsRef<[u8]>,
-    ) -> Result<()> {
-        self.write_str(key)?;
-        self.write(ty)?;
-        self.write_bytes(val.as_ref())
-    }
-
-    pub fn write_alignment(&mut self, align: usize) -> Result<()> {
-        self.write_meta_kv(
-            GENERAL_ALIGNMENT,
-            GGufMetaDataValueType::U32,
-            (align as u32).to_le_bytes(),
-        )
-    }
-
-    pub fn write_tensor_info(
-        &mut self,
-        name: impl AsRef<str>,
-        shape: &[u64],
-        ty: GGmlType,
-        offset: usize,
-    ) -> Result<()> {
-        self.write_str(name)?;
-        self.write(shape.len() as u32)?;
-        self.write_bytes(unsafe { from_raw_parts(shape.as_ptr().cast(), size_of_val(shape)) })?;
-        self.write(ty)?;
-        self.write(offset as u64)
-    }
-
-    #[inline]
-    pub fn flush(&mut self) -> Result<()> {
-        self.0.flush()
-    }
 }
 
 #[inline(always)]
-fn as_slice<T: Sized>(val: &T) -> &[u8] {
-    unsafe { from_raw_parts(val as *const _ as *const _, sizeof!(T)) }
+fn as_slice<T: ?Sized>(val: &T) -> &[u8] {
+    unsafe { from_raw_parts(val as *const _ as *const _, size_of_val(val)) }
+}
+
+#[inline(always)]
+const fn pad(pos: usize, alignment: usize) -> usize {
+    (alignment - pos % alignment) % alignment
 }
 
 mod internal {
@@ -107,11 +261,6 @@ mod internal {
         pub fn write_bytes(&mut self, val: &[u8]) -> Result<()> {
             self.1 += val.len();
             self.0.write_all(val.as_ref())
-        }
-
-        #[inline]
-        pub fn flush(&mut self) -> Result<()> {
-            self.0.flush()
         }
     }
 }

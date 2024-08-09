@@ -1,12 +1,7 @@
-﻿use crate::{
-    file_info::print_file_info,
-    gguf_file::{pad, GGufFile},
-    loose_shards::LooseShards,
-    YES,
-};
-use ggus::{GGufFileHeader, GGufWriter, GENERAL_ALIGNMENT};
+﻿use crate::{file_info::print_file_info, gguf_file::GGufFile, loose_shards::LooseShards, YES};
+use ggus::{GGufFileHeader, GGufMetaWriter, GENERAL_ALIGNMENT};
 use indexmap::{IndexMap, IndexSet};
-use std::{fs::File, iter::zip, path::PathBuf, thread};
+use std::{fs::File, path::PathBuf, thread};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
@@ -81,8 +76,8 @@ impl MergeArgs {
         let n_meta_kvs = kvs.len() + 1;
         let out = File::create(file_format.single_file()).unwrap();
         let header = GGufFileHeader::new(3, n_tensors as _, n_meta_kvs as _);
-        let mut writer = GGufWriter::new(out, header).unwrap();
 
+        let mut writer = GGufMetaWriter::new(out, header).unwrap();
         writer.write_alignment(align).unwrap();
         for kv in kvs {
             writer
@@ -90,38 +85,15 @@ impl MergeArgs {
                 .unwrap();
         }
 
-        let mut cursor = 0;
-        let mut paddings = Vec::with_capacity(tensors.len() + 1);
-        paddings.push(0);
-
-        for t in tensors.keys() {
-            writer
-                .write_tensor_info(t.name(), t.shape(), t.ggml_type(), cursor)
-                .unwrap();
-
-            cursor += t.nbytes();
-            let padding = pad(cursor, align);
-
-            cursor += padding;
-            paddings.push(padding);
-        }
-
-        paddings.pop();
-        paddings[0] = pad(writer.written_bytes(), align);
-
-        for ((t, i), padding) in zip(tensors, paddings) {
-            for _ in 0..padding {
-                writer.write(0u8).unwrap();
-            }
-            writer
-                .write_bytes(&files[i].data[t.offset()..][..t.nbytes()])
-                .unwrap();
+        let mut writer = writer.finish();
+        for (t, i) in tensors {
+            writer.write_tensor(&t, files[i].data).unwrap();
         }
 
         println!(
             "{YES}Merged file is written to: \"{}\"",
             file_format.single_file().display()
         );
-        print_file_info(n_tensors, n_meta_kvs, writer.written_bytes());
+        print_file_info(n_tensors, n_meta_kvs, writer.finish().unwrap());
     }
 }

@@ -11,7 +11,7 @@ use crate::{
 use indexmap::IndexMap;
 use std::{hash::Hash, slice::from_raw_parts};
 
-pub use general::GENERAL_ALIGNMENT;
+pub use general::{DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT};
 pub use tokenizer::{utok, GGufArray, GGufTokenType};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -128,10 +128,16 @@ impl<'a> GGufMetaKVPairs<'a> {
         self.nbytes
     }
 
+    #[inline]
     pub fn get(&self, key: impl AsRef<str>) -> Option<GGufMetaKV<'a>> {
         self.indices
             .get_key_value(key.as_ref())
             .map(|(&key, &len)| GGufMetaKV { key, len })
+    }
+
+    #[inline]
+    pub fn contains(&self, key: impl AsRef<str>) -> bool {
+        self.indices.contains_key(key.as_ref())
     }
 
     fn get_typed(

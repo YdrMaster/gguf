@@ -156,7 +156,7 @@ fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
     Ok(())
 }
 
-fn show_meta_kvs<'a>(kvs: &GGufMetaKVPairs, filter: &Regex, detail: usize) -> Result<(), Failed> {
+fn show_meta_kvs(kvs: &GGufMetaKVPairs, filter: &Regex, detail: usize) -> Result<(), Failed> {
     let kvs = kvs
         .kvs()
         .filter(move |m| filter.is_match(m.key()))
@@ -271,7 +271,7 @@ fn fmt_meta_val<'a>(
     Ok(())
 }
 
-fn show_tensors<'a>(tensors: &GGufTensors, filter: &Regex) -> Result<(), Failed> {
+fn show_tensors(tensors: &GGufTensors, filter: &Regex) -> Result<(), Failed> {
     let tensors = tensors
         .iter()
         .filter(move |t| filter.is_match(t.name()))

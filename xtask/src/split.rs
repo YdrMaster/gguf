@@ -1,13 +1,6 @@
-﻿use crate::{
-    file_info::print_file_info, gguf_file::GGufFile, loose_shards::LooseShards, write_tensors, YES,
-};
-use ggus::{GGufFileHeader, GGufTensorInfo, GGufWriter};
-use std::{
-    fs::File,
-    io::{Result as IoResult, Write},
-    mem::size_of,
-    path::PathBuf,
-};
+﻿use crate::{file_info::print_file_info, gguf_file::GGufFile, loose_shards::LooseShards, YES};
+use ggus::{GGufFileHeader, GGufMetaWriter, GGufSimulator, GENERAL_ALIGNMENT};
+use std::{fs::File, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct SplitArgs {
@@ -72,28 +65,31 @@ impl SplitArgs {
         let source = GGufFile::new(&mmap).unwrap();
         // 生成分片方案
         let mut file_format = shards;
-        let first_size = source.header.nbytes() + source.meta_kvs.nbytes();
-        let others_size = others_size();
-        let mut shards = vec![ShardMeta {
-            n_tensors: 0,
-            n_bytes: first_size,
-        }];
+        let mut shards = vec![0usize];
+
+        let mut simulator = GGufSimulator::new();
+        simulator.write(source.meta_kvs.nbytes());
+        if !source.meta_kvs.contains(GENERAL_ALIGNMENT) {
+            simulator.write_alignment();
+        }
+
         for info in source.tensors.iter() {
-            let tensor_size = tensor_size(&info);
             match &mut *shards {
-                [_] if no_tensor_first => shards.push(ShardMeta {
-                    n_tensors: 1,
-                    n_bytes: others_size + tensor_size,
-                }),
+                [_] if no_tensor_first => {
+                    simulator = GGufSimulator::new();
+                    simulator.write_alignment();
+                    simulator.write_tensor(&info);
+                    shards.push(1);
+                }
                 [.., last] => {
-                    if last.n_tensors < max_tensors && last.n_bytes + tensor_size < max_bytes {
-                        last.n_tensors += 1;
-                        last.n_bytes += tensor_size;
+                    simulator.write_tensor(&info);
+                    if *last < max_tensors && simulator.written_bytes() < max_bytes {
+                        *last += 1;
                     } else {
-                        shards.push(ShardMeta {
-                            n_tensors: 1,
-                            n_bytes: others_size + tensor_size,
-                        });
+                        simulator = GGufSimulator::new();
+                        simulator.write_alignment();
+                        simulator.write_tensor(&info);
+                        shards.push(1);
                     }
                 }
                 [] => unreachable!(),
@@ -116,10 +112,11 @@ impl SplitArgs {
         }
         // 写入第一个分片
         {
-            let n_tensors = shards[0].n_tensors;
+            let n_tensors = shards[0];
             let path = file_format.get(0).unwrap();
             let header = GGufFileHeader::new(3, n_tensors as _, filter_split as _);
-            let mut writer = GGufWriter::new(File::create(&path).unwrap(), header).unwrap();
+
+            let mut writer = GGufMetaWriter::new(File::create(&path).unwrap(), header).unwrap();
             for kv in source.meta_kvs.kvs() {
                 if !kv.key().starts_with("split.") {
                     writer
@@ -127,30 +124,36 @@ impl SplitArgs {
                         .unwrap();
                 }
             }
-            write_tensors(&mut writer, &tensors[..n_tensors], align, source.data);
+
+            let mut writer = writer.finish();
+            for t in &tensors[..n_tensors] {
+                writer.write_tensor(t, source.data).unwrap();
+            }
+            let n_bytes = writer.finish().unwrap();
 
             println!("{YES}Shard is written to: \"{}\"", path.display());
-            print_file_info(n_tensors, filter_split, writer.written_bytes());
+            print_file_info(n_tensors, filter_split, n_bytes);
         }
         // 写入其他分片
-        let mut used_tensors = shards[0].n_tensors;
-        for (i, shard) in shards.into_iter().enumerate().skip(1) {
-            let n_tensors = shard.n_tensors;
+        let mut tensors = &tensors[shards[0]..];
+        for (i, n_tensors) in shards.into_iter().enumerate().skip(1) {
+            let (current, others) = tensors.split_at(n_tensors);
+            tensors = others;
+
             let path = file_format.get(i).unwrap();
             let header = GGufFileHeader::new(3, n_tensors as _, 1);
-            let mut writer = GGufWriter::new(File::create(&path).unwrap(), header).unwrap();
+
+            let mut writer = GGufMetaWriter::new(File::create(&path).unwrap(), header).unwrap();
             writer.write_alignment(align).unwrap();
 
-            write_tensors(
-                &mut writer,
-                &tensors[used_tensors..][..n_tensors],
-                align,
-                source.data,
-            );
-            used_tensors += n_tensors;
+            let mut writer = writer.finish();
+            for t in current {
+                writer.write_tensor(t, source.data).unwrap();
+            }
+            let n_bytes = writer.finish().unwrap();
 
             println!("{YES}Shard is written to: \"{}\"", path.display());
-            print_file_info(n_tensors, 1, writer.written_bytes());
+            print_file_info(n_tensors, 1, n_bytes);
         }
     }
 }
@@ -161,34 +164,4 @@ fn parse_size_num(num: &[u8], k: usize) -> Option<usize> {
         .parse::<usize>()
         .ok()
         .map(|n| n << k)
-}
-
-struct NWriter;
-impl Write for NWriter {
-    fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> IoResult<()> {
-        Ok(())
-    }
-}
-
-fn others_size() -> usize {
-    let mut writer = GGufWriter::new(NWriter, GGufFileHeader::new(3, 0, 0)).unwrap();
-    writer.write_alignment(0).unwrap();
-    writer.written_bytes()
-}
-
-fn tensor_size(info: &GGufTensorInfo) -> usize {
-    let mut writer = GGufWriter::new(NWriter, GGufFileHeader::new(3, 0, 0)).unwrap();
-    writer
-        .write_tensor_info(info.name(), info.shape(), info.ggml_type(), info.offset())
-        .unwrap();
-    writer.written_bytes() + info.nbytes() - size_of::<GGufFileHeader>()
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ShardMeta {
-    n_tensors: usize,
-    n_bytes: usize,
 }
