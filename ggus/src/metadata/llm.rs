@@ -1,4 +1,4 @@
-﻿use super::{GGufMetaDataValueType, GGufMetaKVPairs};
+﻿use crate::{GGufMetaDataValueType, GGufMetaKVPairs};
 
 pub struct LlmMeta<'a>(GGufMetaKVPairs<'a>, &'a str);
 

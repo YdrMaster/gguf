@@ -1,4 +1,6 @@
-﻿use crate::{convert::ConvertArgs, name_pattern::compile_patterns, shards::Shards};
+﻿use crate::{
+    convert::ConvertArgs, file_info::show_file_info, name_pattern::compile_patterns, shards::Shards,
+};
 use std::{path::PathBuf, str::from_utf8};
 
 #[derive(Args, Default)]
@@ -62,10 +64,6 @@ impl SplitArgs {
         }
         .convert()
         .unwrap();
-
-        for file in files {
-            println!("{file}");
-            println!();
-        }
+        show_file_info(&files);
     }
 }

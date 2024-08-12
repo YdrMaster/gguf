@@ -1,4 +1,4 @@
-﻿use crate::{convert::ConvertArgs, name_pattern::compile_patterns};
+﻿use crate::{convert::ConvertArgs, file_info::show_file_info, name_pattern::compile_patterns};
 use std::path::PathBuf;
 
 #[derive(Args, Default)]
@@ -39,10 +39,6 @@ impl FilterArgs {
         }
         .convert()
         .unwrap();
-
-        let [file] = &*files else {
-            unreachable!();
-        };
-        println!("{file}");
+        show_file_info(&files);
     }
 }

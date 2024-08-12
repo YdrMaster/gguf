@@ -1,9 +1,8 @@
-﻿use crate::{
-    reader::{GGufReadError, GGufReader},
-    sizeof,
-};
+﻿use crate::{GGufReadError, GGufReader};
 use indexmap::IndexMap;
-use std::{hash::Hash, marker::PhantomData, slice::from_raw_parts, str::from_utf8_unchecked};
+use std::{
+    hash::Hash, marker::PhantomData, mem::size_of, slice::from_raw_parts, str::from_utf8_unchecked,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
@@ -45,7 +44,7 @@ pub enum GGmlType {
 impl GGmlType {
     fn nbytes(self) -> usize {
         match self {
-            Self::F32 => sizeof!(f32),
+            Self::F32 => size_of::<f32>(),
             Self::F16 => 2,
             Self::Q4_0 => todo!(),
             Self::Q4_1 => todo!(),
@@ -67,11 +66,11 @@ impl GGmlType {
             Self::IQ3S => todo!(),
             Self::IQ2S => todo!(),
             Self::IQ4XS => todo!(),
-            Self::I8 => sizeof!(i8),
-            Self::I16 => sizeof!(i16),
-            Self::I32 => sizeof!(i32),
-            Self::I64 => sizeof!(i64),
-            Self::F64 => sizeof!(f64),
+            Self::I8 => size_of::<i8>(),
+            Self::I16 => size_of::<i16>(),
+            Self::I32 => size_of::<i32>(),
+            Self::I64 => size_of::<i64>(),
+            Self::F64 => size_of::<f64>(),
             Self::IQ1M => todo!(),
             _ => unimplemented!(),
         }
@@ -162,13 +161,13 @@ impl<'a> GGufTensorInfo<'a> {
             let ptr = name.as_ptr().add(name.len());
             let ndim = ptr.cast::<u32>().read_unaligned() as usize;
 
-            let ptr = ptr.add(sizeof!(u32));
+            let ptr = ptr.add(size_of::<u32>());
             let shape = ptr;
 
-            let ptr = ptr.add(ndim * sizeof!(u64));
+            let ptr = ptr.add(ndim * size_of::<u64>());
             let ggml_type = ptr.cast::<GGmlType>().read_unaligned();
 
-            let ptr = ptr.add(sizeof!(u32));
+            let ptr = ptr.add(size_of::<u32>());
             let offset = ptr.cast::<u64>().read_unaligned();
 
             let mut body = vec![0u64; 4 + ndim].into_boxed_slice();

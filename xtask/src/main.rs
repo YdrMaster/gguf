@@ -1,7 +1,6 @@
 mod convert;
 mod file_info;
 mod filter;
-mod gguf_file;
 mod merge;
 mod name_pattern;
 mod shards;

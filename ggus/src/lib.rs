@@ -1,27 +1,26 @@
 #![doc = include_str!("../README.md")]
 #![deny(warnings)]
 
+mod file;
 mod header;
 mod metadata;
 mod name;
-mod reader;
+mod read;
 mod tensor;
-mod writer;
+mod write;
 
+pub use file::{GGuf, GGufError};
 pub use header::GGufFileHeader;
 pub use metadata::{
     utok, GGufArray, GGufFileType, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs,
     GGufTokenType, DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT,
 };
 pub use name::GGufFileName;
-pub use reader::{GGufReadError, GGufReader};
+pub use read::{GGufReadError, GGufReader};
 pub use tensor::{GGmlType, GGufTensorInfo, GGufTensors};
-pub use writer::{GGufMetaWriter, GGufSimulator, GGufTensorWriter};
+pub use write::{GGufMetaWriter, GGufSimulator, GGufTensorWriter};
 
-macro_rules! sizeof {
-    ($ty:ty) => {
-        std::mem::size_of::<$ty>()
-    };
+#[inline(always)]
+const fn pad(pos: usize, align: usize) -> usize {
+    (align - pos % align) % align
 }
-
-use sizeof;

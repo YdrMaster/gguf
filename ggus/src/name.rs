@@ -1,5 +1,4 @@
-﻿use core::fmt;
-use std::str::FromStr;
+﻿use std::{fmt, str::FromStr};
 
 #[derive(Clone, Debug)]
 pub struct GGufFileName {

@@ -1,4 +1,4 @@
-﻿use super::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaKVPairs};
+﻿use crate::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaKVPairs};
 
 pub const GENERAL_ALIGNMENT: &str = "general.alignment";
 pub const DEFAULT_ALIGNMENT: usize = 32;

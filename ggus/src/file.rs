@@ -1,9 +1,8 @@
-use ggus::{GGufFileHeader, GGufMetaKVPairs, GGufReadError, GGufTensors};
+﻿use crate::{pad, GGufFileHeader, GGufMetaKVPairs, GGufReadError, GGufTensors};
 use std::{error::Error, fmt};
 
 #[derive(Clone)]
-pub(crate) struct GGufFile<'a> {
-    #[allow(unused)]
+pub struct GGuf<'a> {
     pub header: GGufFileHeader,
     pub meta_kvs: GGufMetaKVPairs<'a>,
     pub tensors: GGufTensors<'a>,
@@ -11,7 +10,7 @@ pub(crate) struct GGufFile<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) enum GGufError {
+pub enum GGufError {
     MagicMismatch,
     EndianNotSupport,
     VersionNotSupport,
@@ -31,8 +30,8 @@ impl fmt::Display for GGufError {
 
 impl Error for GGufError {}
 
-impl<'a> GGufFile<'a> {
-    pub fn new(data: &'a [u8]) -> Result<Self, GGufError> {
+impl<'a> GGuf<'a> {
+    pub fn scan(data: &'a [u8]) -> Result<Self, GGufError> {
         let header = unsafe { data.as_ptr().cast::<GGufFileHeader>().read() };
         if !header.is_magic_correct() {
             return Err(GGufError::MagicMismatch);
@@ -65,9 +64,4 @@ impl<'a> GGufFile<'a> {
             data: &data[cursor + padding..],
         })
     }
-}
-
-#[inline(always)]
-pub(crate) const fn pad(pos: usize, align: usize) -> usize {
-    (align - pos % align) % align
 }

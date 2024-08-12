@@ -4,10 +4,7 @@ mod general;
 mod llm;
 mod tokenizer;
 
-use crate::{
-    reader::{GGufReadError, GGufReader},
-    sizeof,
-};
+use crate::{GGufReadError, GGufReader};
 use indexmap::IndexMap;
 use std::{hash::Hash, slice::from_raw_parts};
 
@@ -234,7 +231,7 @@ impl<'a> GGufMetaKV<'a> {
                 self.key
                     .as_ptr()
                     .add(self.key.len())
-                    .add(sizeof!(GGufMetaDataValueType)),
+                    .add(size_of::<GGufMetaDataValueType>()),
                 self.len,
             )
         }

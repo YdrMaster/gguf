@@ -1,4 +1,4 @@
-﻿use crate::{sizeof, GGufMetaDataValueType};
+﻿use crate::GGufMetaDataValueType;
 use std::str::Utf8Error;
 
 pub struct GGufReader<'a> {
@@ -25,8 +25,8 @@ impl<'a> GGufReader<'a> {
         self.cursor
     }
 
-    pub(crate) fn skip<T: Copy>(&mut self, len: usize) -> Result<(), GGufReadError> {
-        let len = len * sizeof!(T);
+    pub(crate) fn skip<T: Copy + 'static>(&mut self, len: usize) -> Result<(), GGufReadError> {
+        let len = len * size_of::<T>();
         let data = &self.data[self.cursor..];
         if data.len() >= len {
             self.cursor += len;
@@ -36,7 +36,7 @@ impl<'a> GGufReader<'a> {
         }
     }
 
-    pub fn read<T: Copy>(&mut self) -> Result<T, GGufReadError> {
+    pub fn read<T: Copy + 'static>(&mut self) -> Result<T, GGufReadError> {
         let ptr = self.data[self.cursor..].as_ptr().cast::<T>();
         self.skip::<T>(1)?;
         Ok(unsafe { ptr.read_unaligned() })

@@ -1,5 +1,4 @@
-﻿use super::{GGufMetaDataValueType, GGufMetaKVPairs};
-use crate::reader::GGufReader;
+﻿use crate::{GGufMetaDataValueType, GGufMetaKVPairs, GGufReader};
 use std::marker::PhantomData;
 
 #[repr(transparent)]
@@ -78,7 +77,7 @@ impl<'a> GGufArray<'a, str> {
     }
 }
 
-impl<'a, T: Copy> Iterator for GGufArray<'a, T> {
+impl<'a, T: Copy + 'static> Iterator for GGufArray<'a, T> {
     type Item = T;
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {

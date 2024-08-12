@@ -1,9 +1,9 @@
 ﻿mod read;
 mod write;
 
-use crate::{file_info::FileInfo, gguf_file::GGufError};
+use crate::file_info::FileInfo;
 use digit_layout::DigitLayout;
-use ggus::GENERAL_ALIGNMENT;
+use ggus::{GGufError, GENERAL_ALIGNMENT};
 use memmap2::Mmap;
 use read::read_files;
 use regex::Regex;

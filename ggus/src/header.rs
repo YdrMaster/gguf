@@ -1,5 +1,4 @@
-﻿use crate::sizeof;
-use std::str::Utf8Error;
+﻿use std::str::Utf8Error;
 
 #[derive(Clone, Default, Debug)]
 #[repr(C)]
@@ -45,6 +44,6 @@ impl GGufFileHeader {
 
     #[inline]
     pub const fn nbytes(&self) -> usize {
-        sizeof!(Self)
+        size_of::<Self>()
     }
 }
