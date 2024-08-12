@@ -1,6 +1,3 @@
 [workspace]
 members = ["ggus", "xtask"]
 resolver = "2"
-
-[workspace.dependencies]
-indexmap = "2.2"

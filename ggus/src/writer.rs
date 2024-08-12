@@ -38,30 +38,21 @@ impl<T: Write> GGufMetaWriter<T> {
 
     #[inline]
     pub fn write_alignment(&mut self, align: usize) -> Result<()> {
-        self.write_meta_kv(
-            GENERAL_ALIGNMENT,
-            GGufMetaDataValueType::U32,
-            (align as u32).to_le_bytes(),
-        )
+        self.alignment = self.writer.write_alignment(align)?;
+        Ok(())
     }
 
+    #[inline]
     pub fn write_meta_kv(
         &mut self,
         key: impl AsRef<str>,
         ty: GGufMetaDataValueType,
         val: impl AsRef<[u8]>,
     ) -> Result<()> {
-        if key.as_ref() == GENERAL_ALIGNMENT {
-            let &[a, b, c, d] = val.as_ref() else {
-                use std::io::{Error, ErrorKind::InvalidData};
-                return Err(Error::new(InvalidData, "general.alignment must be an u32"));
-            };
-            self.alignment = u32::from_le_bytes([a, b, c, d]) as _;
+        if let Some(align) = self.writer.write_meta_kv(key, ty, val)? {
+            self.alignment = align;
         }
-
-        self.writer.write_str(key)?;
-        self.writer.write(ty)?;
-        self.writer.write_bytes(val.as_ref())
+        Ok(())
     }
 
     #[inline]
@@ -131,35 +122,32 @@ impl GGufSimulator {
     }
 
     #[inline]
+    pub fn with_alignment(align: usize) -> Self {
+        let mut ans = Self::new();
+        ans.write_alignment(align);
+        ans
+    }
+
+    #[inline]
     pub fn write(&mut self, n: usize) {
         self.direct += n;
     }
 
     #[inline]
-    pub fn write_alignment(&mut self) {
-        self.write_meta_kv(
-            GENERAL_ALIGNMENT,
-            GGufMetaDataValueType::U32,
-            (DEFAULT_ALIGNMENT as u32).to_le_bytes(),
-        )
+    pub fn write_alignment(&mut self, align: usize) {
+        self.alignment = self.writer.write_alignment(align).unwrap();
     }
 
+    #[inline]
     pub fn write_meta_kv(
         &mut self,
         key: impl AsRef<str>,
         ty: GGufMetaDataValueType,
         val: impl AsRef<[u8]>,
     ) {
-        if key.as_ref() == GENERAL_ALIGNMENT {
-            let &[a, b, c, d] = val.as_ref() else {
-                panic!("general.alignment must be an u32")
-            };
-            self.alignment = u32::from_le_bytes([a, b, c, d]) as _;
+        if let Some(align) = self.writer.write_meta_kv(key, ty, val).unwrap() {
+            self.alignment = align;
         }
-
-        self.writer.write_str(key).unwrap();
-        self.writer.write(ty).unwrap();
-        self.writer.write_bytes(val.as_ref()).unwrap();
     }
 
     pub fn write_tensor(&mut self, info: &GGufTensorInfo) {
@@ -228,6 +216,39 @@ impl<T: Write> GGufWriter<T> {
         let val = val.as_ref();
         self.write_bytes(as_slice(&(val.len() as u64)))?;
         self.write_bytes(val.as_bytes())
+    }
+
+    #[inline]
+    pub fn write_alignment(&mut self, align: usize) -> Result<usize> {
+        self.write_meta_kv(
+            GENERAL_ALIGNMENT,
+            GGufMetaDataValueType::U32,
+            (align as u32).to_le_bytes(),
+        )
+        .map(Option::unwrap)
+    }
+
+    pub fn write_meta_kv(
+        &mut self,
+        key: impl AsRef<str>,
+        ty: GGufMetaDataValueType,
+        val: impl AsRef<[u8]>,
+    ) -> Result<Option<usize>> {
+        let key = key.as_ref();
+        let val = val.as_ref();
+
+        self.write_str(key)?;
+        self.write(ty)?;
+        self.write_bytes(val)?;
+
+        Ok(if key == GENERAL_ALIGNMENT {
+            let &[a, b, c, d] = val else {
+                panic!("general.alignment must be an u32")
+            };
+            Some(u32::from_le_bytes([a, b, c, d]) as _)
+        } else {
+            None
+        })
     }
 }
 

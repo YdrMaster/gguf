@@ -83,7 +83,7 @@ pub struct GGufMetaKVPairs<'a> {
 }
 
 impl<'a> GGufMetaKVPairs<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
+    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError> {
         let mut reader = GGufReader::new(data);
         let mut indices = IndexMap::with_capacity(count as _);
         for _ in 0..count {
@@ -92,7 +92,7 @@ impl<'a> GGufMetaKVPairs<'a> {
             let begin = reader.cursor();
             skip_value(ty, &mut reader, 1)?;
             if indices.insert(key, reader.cursor() - begin).is_some() {
-                return Err(GGufReadError::DuplicatedKey(key));
+                return Err(GGufReadError::DuplicatedKey(key.into()));
             }
         }
         Ok(Self {
@@ -152,11 +152,11 @@ impl<'a> GGufMetaKVPairs<'a> {
     }
 }
 
-fn skip_value<'a>(
+fn skip_value(
     ty: GGufMetaDataValueType,
-    reader: &mut GGufReader<'a>,
+    reader: &mut GGufReader,
     len: usize,
-) -> Result<(), GGufReadError<'a>> {
+) -> Result<(), GGufReadError> {
     use GGufMetaDataValueType as Ty;
     match ty {
         Ty::U8 => reader.skip::<u8>(len),

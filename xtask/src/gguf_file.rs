@@ -11,14 +11,14 @@ pub(crate) struct GGufFile<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) enum GGufError<'a> {
+pub(crate) enum GGufError {
     MagicMismatch,
     EndianNotSupport,
     VersionNotSupport,
-    Reading(GGufReadError<'a>),
+    Reading(GGufReadError),
 }
 
-impl fmt::Display for GGufError<'_> {
+impl fmt::Display for GGufError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::MagicMismatch => f.write_str("magic mismatch"),
@@ -29,10 +29,10 @@ impl fmt::Display for GGufError<'_> {
     }
 }
 
-impl Error for GGufError<'_> {}
+impl Error for GGufError {}
 
 impl<'a> GGufFile<'a> {
-    pub fn new(data: &'a [u8]) -> Result<Self, GGufError<'a>> {
+    pub fn new(data: &'a [u8]) -> Result<Self, GGufError> {
         let header = unsafe { data.as_ptr().cast::<GGufFileHeader>().read() };
         if !header.is_magic_correct() {
             return Err(GGufError::MagicMismatch);

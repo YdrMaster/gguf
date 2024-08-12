@@ -12,4 +12,4 @@ keywords = ["gguf", "ggml", "llama-cpp"]
 categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]
-indexmap.workspace = true
+indexmap = "2.3"

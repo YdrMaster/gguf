@@ -1,9 +1,10 @@
+mod convert;
 mod file_info;
 mod filter;
 mod gguf_file;
-mod loose_shards;
 mod merge;
 mod name_pattern;
+mod shards;
 mod show;
 mod split;
 

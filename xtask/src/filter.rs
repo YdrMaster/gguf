@@ -1,6 +1,5 @@
-﻿use crate::{file_info::print_file_info, gguf_file::GGufFile, name_pattern::compile_patterns, YES};
-use ggus::{GGufFileHeader, GGufMetaWriter};
-use std::{fs::File, path::PathBuf};
+﻿use crate::{convert::ConvertArgs, name_pattern::compile_patterns};
+use std::path::PathBuf;
 
 #[derive(Args, Default)]
 pub struct FilterArgs {
@@ -25,59 +24,25 @@ impl FilterArgs {
             filter_meta,
             filter_tensor,
         } = self;
-        // 打开文件
-        let file = File::open(&file_path)
-            .map_err(|e| {
-                eprintln!("Failed to open");
-                eprintln!("  file: {}", file_path.display());
-                eprintln!("  cause: {e}");
-            })
-            .unwrap();
-        let file = unsafe { memmap2::Mmap::map(&file).unwrap() };
-        let file = GGufFile::new(&file).unwrap();
-        // 编译过滤器
-        let filter_meta = compile_patterns(&filter_meta);
-        let filter_tensor = compile_patterns(&filter_tensor);
-        // 过滤元信息和张量
-        let meta_kvs = file
-            .meta_kvs
-            .kvs()
-            .filter(move |t| filter_meta.is_match(t.key()))
-            .collect::<Vec<_>>();
-        let tensors = file
-            .tensors
-            .iter()
-            .filter(move |t| filter_tensor.is_match(t.name()))
-            .collect::<Vec<_>>();
-        if meta_kvs.len() == file.meta_kvs.len() && tensors.len() == file.tensors.len() {
-            eprintln!("Nothing to filter");
-            return;
-        }
-        // 创建存储目录
-        let mut out = file_path;
-        if let Some(dir) = output_dir {
-            if let Err(e) = std::fs::create_dir_all(&dir) {
-                panic!("Failed to create output directory: {e}");
-            }
-            out = dir.join(out.file_name().unwrap());
-        }
-        // 写入文件
-        out = out.with_extension("part.gguf");
 
-        let header = GGufFileHeader::new(3, tensors.len() as _, meta_kvs.len() as _);
-        let mut writer = GGufMetaWriter::new(File::create(&out).unwrap(), header).unwrap();
-        for kv in &meta_kvs {
-            writer
-                .write_meta_kv(kv.key(), kv.ty(), kv.value_bytes())
-                .unwrap();
+        let files = ConvertArgs {
+            output_name: file_path.file_stem().unwrap().to_str().unwrap().to_string() + ".part",
+            input_files: vec![file_path],
+            output_dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
+            filter_meta: compile_patterns(&filter_meta),
+            filter_tensor: compile_patterns(&filter_tensor),
+            cast_data: None,
+            optimize: vec![],
+            split_tensor_count: usize::MAX,
+            split_file_size: usize::MAX,
+            split_no_tensor_first: false,
         }
-        let mut writer = writer.finish();
-        for t in &tensors {
-            writer.write_tensor(t, file.data).unwrap();
-        }
-        let n_bytes = writer.finish().unwrap();
+        .convert()
+        .unwrap();
 
-        println!("{YES}Shard is written to: \"{}\"", out.display());
-        print_file_info(tensors.len(), meta_kvs.len(), n_bytes);
+        let [file] = &*files else {
+            unreachable!();
+        };
+        println!("{file}");
     }
 }

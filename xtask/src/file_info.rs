@@ -1,10 +1,32 @@
-﻿use std::fmt;
+﻿use crate::YES;
+use std::{fmt, path::PathBuf};
 
-pub fn print_file_info(n_tensors: usize, n_meta_kvs: usize, n_bytes: usize) {
-    println!("   Number of tensors: {n_tensors}");
-    println!("   Number of meta kvs: {n_meta_kvs}");
-    println!("   File size: {}", MemSize(n_bytes));
-    println!();
+pub struct FileInfo {
+    pub path: PathBuf,
+    pub n_tensors: usize,
+    pub n_meta_kvs: usize,
+    pub n_bytes: usize,
+}
+
+impl fmt::Display for FileInfo {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self {
+            path,
+            n_tensors,
+            n_meta_kvs,
+            n_bytes,
+        } = self;
+        write!(
+            f,
+            "\
+{YES}Shard is written to: \"{}\"
+   Number of tensors: {n_tensors}
+   Number of meta kvs: {n_meta_kvs}
+   File size: {}",
+            path.display(),
+            MemSize(*n_bytes),
+        )
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

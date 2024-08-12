@@ -1,4 +1,4 @@
-﻿use crate::{loose_shards::LooseShards, name_pattern::compile_patterns, ERR, YES};
+﻿use crate::{name_pattern::compile_patterns, shards::Shards, ERR, YES};
 use ggus::{
     GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
     GGufTensors,
@@ -46,8 +46,8 @@ impl ShowArgs {
         let filter_tensor = compile_patterns(&filter_tensor);
 
         let files = if shards {
-            LooseShards::from(&*file)
-                .into_iter()
+            Shards::from(&*file)
+                .iter_all()
                 .filter(|p| p.is_file())
                 .collect::<Vec<_>>()
         } else if file.is_file() {
@@ -190,13 +190,13 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize, detail: usize) -> Result<(), Faile
     }
 }
 
-fn fmt_meta_val<'a>(
-    reader: &mut GGufReader<'a>,
+fn fmt_meta_val(
+    reader: &mut GGufReader,
     ty: GGufMetaDataValueType,
     len: usize,
     detail: usize,
     buf: &mut String,
-) -> Result<(), GGufReadError<'a>> {
+) -> Result<(), GGufReadError> {
     struct MultiLines<'a>(&'a str);
     impl fmt::Display for MultiLines<'_> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -7,7 +7,7 @@ authors = ["YdrMaster <ydrml@hotmail.com>"]
 [dependencies]
 ggus = { version = "*", path = "../ggus" }
 
-indexmap.workspace = true
 clap = { version = "4.5", features = ["derive"] }
 memmap2 = "0.9"
 regex = "1.10"
+digit-layout = "0.0"

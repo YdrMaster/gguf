@@ -3,14 +3,7 @@
     sizeof,
 };
 use indexmap::IndexMap;
-use std::{
-    alloc::{alloc, dealloc, Layout},
-    hash::Hash,
-    marker::PhantomData,
-    ptr::{copy_nonoverlapping, NonNull},
-    slice::from_raw_parts,
-    str::from_utf8_unchecked,
-};
+use std::{hash::Hash, marker::PhantomData, slice::from_raw_parts, str::from_utf8_unchecked};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
@@ -92,7 +85,7 @@ pub struct GGufTensors<'a> {
 }
 
 impl<'a> GGufTensors<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError<'a>> {
+    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError> {
         let mut reader = GGufReader::new(data);
         let mut indices = IndexMap::with_capacity(count as _);
         for _ in 0..count {
@@ -102,7 +95,7 @@ impl<'a> GGufTensors<'a> {
             reader.skip::<u32>(1)?;
             reader.skip::<u64>(1)?;
             if indices.insert(name, ()).is_some() {
-                return Err(GGufReadError::DuplicatedKey(name));
+                return Err(GGufReadError::DuplicatedKey(name.into()));
             }
         }
         Ok(Self {
@@ -145,7 +138,7 @@ impl<'a> GGufTensors<'a> {
 
 // | name::ptr | name::len | offset | ggml_type;ndim | shape ..
 #[repr(transparent)]
-pub struct GGufTensorInfo<'a>(NonNull<u64>, PhantomData<&'a ()>);
+pub struct GGufTensorInfo<'a>(Box<[u64]>, PhantomData<&'a ()>);
 
 impl PartialEq for GGufTensorInfo<'_> {
     #[inline]
@@ -160,13 +153,6 @@ impl Hash for GGufTensorInfo<'_> {
     #[inline]
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name().hash(state)
-    }
-}
-
-impl Drop for GGufTensorInfo<'_> {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe { dealloc(self.0.as_ptr().cast(), layout(self.ndim())) }
     }
 }
 
@@ -185,14 +171,15 @@ impl<'a> GGufTensorInfo<'a> {
             let ptr = ptr.add(sizeof!(u32));
             let offset = ptr.cast::<u64>().read_unaligned();
 
-            let body = alloc(layout(ndim)).cast::<u64>();
-            body.write(name.as_ptr() as _);
-            body.add(1).write(name.len() as _);
-            body.add(2).write(offset);
-            body.add(3).cast::<GGmlType>().write(ggml_type);
-            body.add(3).cast::<u32>().add(1).write(ndim as _);
-            copy_nonoverlapping(shape, body.add(4).cast(), ndim * sizeof!(u64));
-            Self(NonNull::new_unchecked(body), PhantomData)
+            let mut body = vec![0u64; 4 + ndim].into_boxed_slice();
+            body[0] = name.as_ptr() as _;
+            body[1] = name.len() as _;
+            body[2] = offset;
+            let ptr = body[3..].as_mut_ptr().cast::<u32>();
+            ptr.cast::<GGmlType>().write(ggml_type);
+            ptr.add(1).write(ndim as _);
+            body[4..].copy_from_slice(from_raw_parts(shape.cast(), ndim));
+            Self(body, PhantomData)
         }
     }
 
@@ -229,9 +216,4 @@ impl<'a> GGufTensorInfo<'a> {
     pub fn nbytes(&self) -> usize {
         self.shape().iter().product::<u64>() as usize * self.ggml_type().nbytes()
     }
-}
-
-#[inline(always)]
-fn layout(ndim: usize) -> Layout {
-    Layout::array::<u64>(4 + ndim).unwrap()
 }
