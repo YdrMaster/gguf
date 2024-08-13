@@ -1,5 +1,5 @@
 ﻿use crate::{pad, GGmlType, GGufFileHeader, GGufMetaDataValueType, GENERAL_ALIGNMENT};
-use internal::Internal;
+use internal_::Internal;
 use std::{
     io::{Result, Write},
     slice::from_raw_parts,
@@ -39,11 +39,11 @@ impl<T: Write> GGufWriter<T> {
     }
 
     #[inline]
-    pub fn write_alignment(&mut self, align: usize) -> Result<usize> {
+    pub fn write_alignment(&mut self, alignment: usize) -> Result<usize> {
         self.write_meta_kv(
             GENERAL_ALIGNMENT,
             GGufMetaDataValueType::U32,
-            (align as u32).to_le_bytes(),
+            (alignment as u32).to_le_bytes(),
         )
         .map(Option::unwrap)
     }
@@ -75,25 +75,25 @@ impl<T: Write> GGufWriter<T> {
         &mut self,
         name: &str,
         shape: &[u64],
-        data_type: GGmlType,
+        ty: GGmlType,
         offset: u64,
     ) -> Result<()> {
         self.write_str(name)?;
         self.write(&[shape.len() as u32])?;
         self.write(shape)?;
-        self.write(&[data_type])?;
+        self.write(&[ty])?;
         self.write(&[offset])
     }
 
-    pub fn write_data(&mut self, data: &[u8], align: usize) -> Result<()> {
-        for _ in 0..pad(self.written_bytes(), align) {
+    pub fn write_data(&mut self, data: &[u8], alignment: usize) -> Result<()> {
+        for _ in 0..pad(self.written_bytes(), alignment) {
             self.write(&[0u8])?;
         }
         self.write(data)
     }
 }
 
-mod internal {
+mod internal_ {
     use std::io::{BufWriter, Result, Write};
 
     pub(super) struct Internal<T: Write>(BufWriter<T>, usize);

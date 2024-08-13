@@ -1,16 +1,19 @@
 ﻿use super::internal::GGufWriter;
-use crate::{pad, GGufFileHeader, GGufMetaDataValueType, GGufTensorInfo, DEFAULT_ALIGNMENT};
-use std::io::{Result, Write};
+use crate::{pad, GGmlType, GGufFileHeader, GGufMetaDataValueType, DEFAULT_ALIGNMENT};
+use std::{
+    io::{Result, Write},
+    ops::Deref,
+};
 
 pub struct GGufMetaWriter<T: Write> {
     writer: GGufWriter<T>,
     alignment: usize,
 }
 
-pub struct GGufTensorWriter<'t, T: Write> {
+pub struct GGufTensorWriter<T: Write, U> {
     writer: GGufWriter<T>,
     alignment: usize,
-    data: Vec<&'t [u8]>,
+    data: Vec<U>,
     offset: usize,
 }
 
@@ -24,26 +27,26 @@ impl<T: Write> GGufMetaWriter<T> {
     }
 
     #[inline]
-    pub fn write_alignment(&mut self, align: usize) -> Result<()> {
-        self.alignment = self.writer.write_alignment(align)?;
+    pub fn write_alignment(&mut self, alignment: usize) -> Result<()> {
+        self.alignment = self.writer.write_alignment(alignment)?;
         Ok(())
     }
 
     #[inline]
     pub fn write_meta_kv(
         &mut self,
-        key: impl AsRef<str>,
+        key: &str,
         ty: GGufMetaDataValueType,
-        val: impl AsRef<[u8]>,
+        val: &[u8],
     ) -> Result<()> {
-        if let Some(align) = self.writer.write_meta_kv(key, ty, val)? {
-            self.alignment = align;
+        if let Some(alignment) = self.writer.write_meta_kv(key, ty, val)? {
+            self.alignment = alignment;
         }
         Ok(())
     }
 
     #[inline]
-    pub fn finish<'t>(self) -> GGufTensorWriter<'t, T> {
+    pub fn finish<U>(self) -> GGufTensorWriter<T, U> {
         GGufTensorWriter {
             writer: self.writer,
             alignment: self.alignment,
@@ -53,18 +56,15 @@ impl<T: Write> GGufMetaWriter<T> {
     }
 }
 
-impl<'t, T: Write> GGufTensorWriter<'t, T> {
-    pub fn write_tensor(&mut self, info: &GGufTensorInfo, data: &'t [u8]) -> Result<()> {
+impl<T: Write, U: Deref<Target = [u8]>> GGufTensorWriter<T, U> {
+    pub fn write_tensor(&mut self, name: &str, ty: GGmlType, shape: &[u64], data: U) -> Result<()> {
         self.offset += pad(self.offset, self.alignment);
-        self.writer.write_tensor_info(
-            info.name(),
-            info.shape(),
-            info.ggml_type(),
-            self.offset as _,
-        )?;
+        self.writer
+            .write_tensor_info(name, shape, ty, self.offset as _)
+            .unwrap();
 
-        let data = &data[info.offset()..][..info.nbytes()];
-        self.offset += data.len();
+        let len = shape.iter().product::<u64>() as usize * ty.nbytes();
+        self.offset += len;
         self.data.push(data);
 
         Ok(())
@@ -79,7 +79,7 @@ impl<'t, T: Write> GGufTensorWriter<'t, T> {
         } = self;
 
         for data in data {
-            writer.write_data(data, alignment)?;
+            writer.write_data(&*data, alignment)?;
         }
         Ok(writer.written_bytes())
     }

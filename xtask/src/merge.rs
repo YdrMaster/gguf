@@ -1,6 +1,4 @@
-﻿use crate::{
-    convert::ConvertArgs, file_info::show_file_info, name_pattern::compile_patterns, shards::Shards,
-};
+﻿use crate::{convert::ConvertArgs, file_info::show_file_info, shards::Shards};
 use std::path::PathBuf;
 
 #[derive(Args, Default)]
@@ -26,10 +24,7 @@ impl MergeArgs {
             input_files: shards.iter_all().collect(),
             output_dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
             output_name: shards.name.into(),
-            filter_meta: compile_patterns("*"),
-            filter_tensor: compile_patterns("*"),
-            cast_data: None,
-            optimize: Vec::new(),
+            operations: Vec::new(),
             split_tensor_count: usize::MAX,
             split_file_size: usize::MAX,
             split_no_tensor_first: false,

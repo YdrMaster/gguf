@@ -1,4 +1,7 @@
-﻿use crate::{convert::ConvertArgs, file_info::show_file_info, name_pattern::compile_patterns};
+﻿use crate::{
+    convert::{ConvertArgs, Operator},
+    file_info::show_file_info,
+};
 use std::path::PathBuf;
 
 #[derive(Args, Default)]
@@ -29,10 +32,10 @@ impl FilterArgs {
             output_name: file_path.file_stem().unwrap().to_str().unwrap().to_string() + ".part",
             input_files: vec![file_path],
             output_dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-            filter_meta: compile_patterns(&filter_meta),
-            filter_tensor: compile_patterns(&filter_tensor),
-            cast_data: None,
-            optimize: vec![],
+            operations: vec![
+                Operator::filter_meta_key(filter_meta),
+                Operator::filter_tensor_name(filter_tensor),
+            ],
             split_tensor_count: usize::MAX,
             split_file_size: usize::MAX,
             split_no_tensor_first: false,

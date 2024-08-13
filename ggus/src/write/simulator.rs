@@ -1,5 +1,5 @@
 ﻿use super::internal::GGufWriter;
-use crate::{pad, GGufFileHeader, GGufMetaDataValueType, GGufTensorInfo, DEFAULT_ALIGNMENT};
+use crate::{pad, GGmlType, GGufFileHeader, GGufMetaDataValueType, DEFAULT_ALIGNMENT};
 use std::io::{Result, Write};
 
 pub struct GGufSimulator {
@@ -28,41 +28,31 @@ impl GGufSimulator {
     }
 
     #[inline]
-    pub fn with_alignment(align: usize) -> Self {
+    pub fn with_alignment(alignment: usize) -> Self {
         let mut ans = Self::new();
-        ans.write_alignment(align);
+        ans.write_alignment(alignment);
         ans
     }
 
     #[inline]
-    pub fn write_alignment(&mut self, align: usize) {
-        self.alignment = self.writer.write_alignment(align).unwrap();
+    pub fn write_alignment(&mut self, alignment: usize) {
+        self.alignment = self.writer.write_alignment(alignment).unwrap();
     }
 
     #[inline]
-    pub fn write_meta_kv(
-        &mut self,
-        key: impl AsRef<str>,
-        ty: GGufMetaDataValueType,
-        val: impl AsRef<[u8]>,
-    ) {
-        if let Some(align) = self.writer.write_meta_kv(key, ty, val).unwrap() {
-            self.alignment = align;
+    pub fn write_meta_kv(&mut self, key: &str, ty: GGufMetaDataValueType, val: &[u8]) {
+        if let Some(alignment) = self.writer.write_meta_kv(key, ty, val).unwrap() {
+            self.alignment = alignment;
         }
     }
 
-    pub fn write_tensor(&mut self, info: &GGufTensorInfo) {
+    pub fn write_tensor(&mut self, name: &str, ty: GGmlType, shape: &[u64]) {
         self.offset += pad(self.offset, self.alignment);
         self.writer
-            .write_tensor_info(
-                info.name(),
-                info.shape(),
-                info.ggml_type(),
-                self.offset as _,
-            )
+            .write_tensor_info(name, shape, ty, self.offset as _)
             .unwrap();
 
-        let len = info.nbytes();
+        let len = shape.iter().product::<u64>() as usize * ty.nbytes();
         self.offset += len;
         self.data.push(len);
     }

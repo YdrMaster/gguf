@@ -1,24 +1,27 @@
-﻿mod read;
+﻿mod operator;
+mod read;
 mod write;
 
 use crate::file_info::FileInfo;
-use digit_layout::DigitLayout;
-use ggus::{GGufError, GENERAL_ALIGNMENT};
+use ggus::{GGmlType, GGufError, GGufMetaDataValueType};
+use indexmap::IndexMap;
 use memmap2::Mmap;
 use read::read_files;
-use regex::Regex;
-use std::{fs::File, io, path::PathBuf};
+use std::{
+    fs::File,
+    io,
+    ops::Deref,
+    path::PathBuf,
+    sync::{Arc, LazyLock},
+};
+
+pub use operator::Operator;
 
 pub struct ConvertArgs {
     pub input_files: Vec<PathBuf>,
     pub output_dir: PathBuf,
     pub output_name: String,
-
-    pub filter_meta: Regex,
-    pub filter_tensor: Regex,
-    pub cast_data: Option<DigitLayout>,
-    pub optimize: Vec<String>,
-
+    pub operations: Vec<Operator>,
     pub split_tensor_count: usize,
     pub split_file_size: usize,
     pub split_no_tensor_first: bool,
@@ -37,10 +40,7 @@ impl ConvertArgs {
             input_files,
             output_dir,
             output_name,
-            filter_meta,
-            filter_tensor,
-            cast_data,
-            optimize,
+            operations,
             split_tensor_count,
             split_file_size,
             split_no_tensor_first,
@@ -53,38 +53,67 @@ impl ConvertArgs {
             .map_err(ConvertError::Io)?;
         let files = read_files(files.iter().map(|m| &**m)).map_err(ConvertError::GGuf)?;
 
-        assert!(cast_data.is_none());
-        assert!(optimize.is_empty());
+        let mut content = Content::new(&files);
 
-        let align = files.iter().map(|f| f.meta_kvs.alignment()).max().unwrap();
-        let meta_kvs = files
-            .iter()
-            .flat_map(|f| f.meta_kvs.kvs())
-            .filter(|kv| {
-                let k = kv.key();
-                k != GENERAL_ALIGNMENT && !k.starts_with("split.") && filter_meta.is_match(k)
-            })
-            .collect::<Vec<_>>();
-        let tensors = files
-            .iter()
-            .enumerate()
-            .flat_map(|(i, f)| {
-                let data = files[i].data;
-                f.tensors.iter().map(move |t| (t, data))
-            })
-            .filter(|(t, _)| filter_tensor.is_match(t.name()))
-            .collect::<Vec<_>>();
+        for op in operations {
+            content.apply(op);
+        }
 
-        write::write_files(
-            &meta_kvs,
-            &tensors,
-            &output_dir,
-            &output_name,
-            align,
-            split_tensor_count,
-            split_file_size,
-            split_no_tensor_first,
-        )
-        .map_err(ConvertError::Io)
+        content
+            .write_files(
+                &output_dir,
+                &output_name,
+                split_tensor_count,
+                split_file_size,
+                split_no_tensor_first,
+            )
+            .map_err(ConvertError::Io)
+    }
+}
+
+struct Content<'a> {
+    alignment: usize,
+    meta_kvs: IndexMap<String, MetaValue<'a>>,
+    tensors: IndexMap<String, Tensor<'a>>,
+}
+
+struct MetaValue<'a> {
+    ty: GGufMetaDataValueType,
+    value: DataPromise<'a>,
+}
+
+struct Tensor<'a> {
+    ty: GGmlType,
+    shape: Vec<u64>,
+    data: DataPromise<'a>,
+}
+
+#[derive(Clone)]
+#[repr(transparent)]
+struct DataPromise<'a>(Arc<dyn DataFuture + Send + Sync + 'a>);
+
+impl Deref for DataPromise<'_> {
+    type Target = [u8];
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.0.get()
+    }
+}
+
+trait DataFuture {
+    fn get(&self) -> &[u8];
+}
+
+impl DataFuture for &[u8] {
+    #[inline]
+    fn get(&self) -> &[u8] {
+        self
+    }
+}
+
+impl<F: FnOnce() -> Mmap> DataFuture for LazyLock<Mmap, F> {
+    #[inline]
+    fn get(&self) -> &[u8] {
+        &**self
     }
 }

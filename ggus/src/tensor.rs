@@ -1,7 +1,10 @@
 ﻿use crate::{GGufReadError, GGufReader};
 use indexmap::IndexMap;
 use std::{
-    hash::Hash, marker::PhantomData, mem::size_of, slice::from_raw_parts, str::from_utf8_unchecked,
+    alloc::{alloc, dealloc, Layout},
+    hash::Hash,
+    ptr::{copy_nonoverlapping, NonNull},
+    slice::from_raw_parts,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -42,7 +45,7 @@ pub enum GGmlType {
 }
 
 impl GGmlType {
-    fn nbytes(self) -> usize {
+    pub fn nbytes(self) -> usize {
         match self {
             Self::F32 => size_of::<f32>(),
             Self::F16 => 2,
@@ -135,9 +138,15 @@ impl<'a> GGufTensors<'a> {
     }
 }
 
-// | name::ptr | name::len | offset | ggml_type;ndim | shape ..
-#[repr(transparent)]
-pub struct GGufTensorInfo<'a>(Box<[u64]>, PhantomData<&'a ()>);
+pub struct GGufTensorInfo<'a> {
+    name: &'a str,
+    ty: GGmlType,
+    ndim: u32,
+    offset: usize,
+    shape: NonNull<u64>,
+}
+
+unsafe impl Sync for GGufTensorInfo<'_> {}
 
 impl PartialEq for GGufTensorInfo<'_> {
     #[inline]
@@ -155,60 +164,65 @@ impl Hash for GGufTensorInfo<'_> {
     }
 }
 
+impl Drop for GGufTensorInfo<'_> {
+    #[inline]
+    fn drop(&mut self) {
+        unsafe {
+            dealloc(
+                self.shape.as_ptr().cast(),
+                Layout::array::<u64>(self.ndim as _).unwrap(),
+            )
+        }
+    }
+}
+
 impl<'a> GGufTensorInfo<'a> {
     fn new(name: &'a str) -> Self {
         unsafe {
             let ptr = name.as_ptr().add(name.len());
-            let ndim = ptr.cast::<u32>().read_unaligned() as usize;
+            let ndim = ptr.cast::<u32>().read_unaligned();
+            let layout = Layout::array::<u64>(ndim as _).unwrap();
 
             let ptr = ptr.add(size_of::<u32>());
-            let shape = ptr;
+            let shape_ = ptr;
 
-            let ptr = ptr.add(ndim * size_of::<u64>());
-            let ggml_type = ptr.cast::<GGmlType>().read_unaligned();
+            let ptr = ptr.add(layout.size());
+            let ty = ptr.cast::<GGmlType>().read_unaligned();
 
             let ptr = ptr.add(size_of::<u32>());
-            let offset = ptr.cast::<u64>().read_unaligned();
+            let offset = ptr.cast::<u64>().read_unaligned() as _;
 
-            let mut body = vec![0u64; 4 + ndim].into_boxed_slice();
-            body[0] = name.as_ptr() as _;
-            body[1] = name.len() as _;
-            body[2] = offset;
-            let ptr = body[3..].as_mut_ptr().cast::<u32>();
-            ptr.cast::<GGmlType>().write(ggml_type);
-            ptr.add(1).write(ndim as _);
-            body[4..].copy_from_slice(from_raw_parts(shape.cast(), ndim));
-            Self(body, PhantomData)
+            let shape = alloc(layout).cast::<u64>();
+            copy_nonoverlapping(shape_, shape.cast(), layout.size());
+
+            Self {
+                name,
+                ty,
+                ndim,
+                offset,
+                shape: NonNull::new_unchecked(shape),
+            }
         }
     }
 
     #[inline]
     pub fn name(&self) -> &'a str {
-        unsafe {
-            let ptr = self.0.as_ptr().read();
-            let len = self.0.as_ptr().add(1).read();
-            from_utf8_unchecked(from_raw_parts(ptr as _, len as _))
-        }
-    }
-
-    #[inline]
-    fn ndim(&self) -> usize {
-        unsafe { self.0.as_ptr().add(3).cast::<u32>().add(1).read() as _ }
+        self.name
     }
 
     #[inline]
     pub fn shape(&self) -> &[u64] {
-        unsafe { from_raw_parts(self.0.as_ptr().add(4), self.ndim()) }
+        unsafe { from_raw_parts(self.shape.as_ptr(), self.ndim as _) }
     }
 
     #[inline]
     pub fn ggml_type(&self) -> GGmlType {
-        unsafe { self.0.as_ptr().add(3).cast::<GGmlType>().read() }
+        self.ty
     }
 
     #[inline]
     pub fn offset(&self) -> usize {
-        unsafe { self.0.as_ptr().add(2).read() as _ }
+        self.offset
     }
 
     #[inline]
