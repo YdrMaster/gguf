@@ -1,4 +1,5 @@
-﻿use std::str::Utf8Error;
+﻿use crate::{GGufReadError, GGufReader};
+use std::str::{from_utf8, Utf8Error};
 
 #[derive(Clone, Default, Debug)]
 #[repr(C)]
@@ -10,6 +11,15 @@ pub struct GGufFileHeader {
 }
 
 const MAGIC: [u8; 4] = *b"GGUF";
+
+impl GGufReader<'_> {
+    #[inline]
+    pub fn read_header(&mut self) -> Result<GGufFileHeader, GGufReadError> {
+        let ptr = self.remaining().as_ptr().cast::<GGufFileHeader>();
+        self.skip::<GGufFileHeader>(1)?;
+        Ok(unsafe { ptr.read() })
+    }
+}
 
 impl GGufFileHeader {
     #[inline]
@@ -39,11 +49,6 @@ impl GGufFileHeader {
 
     #[inline]
     pub const fn magic(&self) -> Result<&str, Utf8Error> {
-        std::str::from_utf8(&self.magic)
-    }
-
-    #[inline]
-    pub const fn nbytes(&self) -> usize {
-        size_of::<Self>()
+        from_utf8(&self.magic)
     }
 }

@@ -1,8 +1,6 @@
 ﻿use crate::{GGufReadError, GGufReader};
-use indexmap::IndexMap;
 use std::{
     alloc::{alloc, dealloc, Layout},
-    hash::Hash,
     ptr::{copy_nonoverlapping, NonNull},
     slice::from_raw_parts,
 };
@@ -45,7 +43,7 @@ pub enum GGmlType {
 }
 
 impl GGmlType {
-    pub fn nbytes(self) -> usize {
+    pub const fn nbytes(self) -> usize {
         match self {
             Self::F32 => size_of::<f32>(),
             Self::F16 => 2,
@@ -80,153 +78,107 @@ impl GGmlType {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct GGufTensors<'a> {
-    indices: IndexMap<&'a str, ()>,
-    nbytes: usize,
-}
+#[repr(transparent)]
+pub struct GGufTensorMeta<'a>(&'a [u8]);
 
-impl<'a> GGufTensors<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError> {
-        let mut reader = GGufReader::new(data);
-        let mut indices = IndexMap::with_capacity(count as _);
-        for _ in 0..count {
-            let name = reader.read_str()?;
-            let ndim = reader.read::<u32>()? as usize;
-            reader.skip::<u64>(ndim)?;
-            reader.skip::<u32>(1)?;
-            reader.skip::<u64>(1)?;
-            if indices.insert(name, ()).is_some() {
-                return Err(GGufReadError::DuplicatedKey(name.into()));
-            }
-        }
-        Ok(Self {
-            indices,
-            nbytes: reader.cursor(),
-        })
-    }
+impl<'a> GGufReader<'a> {
+    pub fn read_tensor_meta(&mut self) -> Result<GGufTensorMeta<'a>, GGufReadError> {
+        let data = self.remaining();
 
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.indices.len()
-    }
+        let _ = self.read_str()?;
+        let ndim: u32 = self.read()?;
+        self.skip::<u64>(ndim as _)?
+            .skip::<GGmlType>(1)?
+            .skip::<u64>(1)?;
 
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.indices.is_empty()
-    }
-
-    #[inline]
-    pub fn names<'s>(&'s self) -> impl Iterator<Item = &'a str> + 's {
-        self.indices.keys().copied()
-    }
-
-    #[inline]
-    pub fn iter<'s>(&'s self) -> impl Iterator<Item = GGufTensorInfo<'a>> + 's {
-        self.indices.keys().map(|name| GGufTensorInfo::new(name))
-    }
-
-    #[inline]
-    pub const fn nbytes(&self) -> usize {
-        self.nbytes
-    }
-
-    pub fn get(&self, name: &str) -> Option<GGufTensorInfo<'a>> {
-        self.indices
-            .get_key_value(name)
-            .map(|(name, ())| GGufTensorInfo::new(name))
+        let data = &data[..data.len() - self.remaining().len()];
+        Ok(unsafe { GGufTensorMeta::new_unchecked(data) })
     }
 }
 
-pub struct GGufTensorInfo<'a> {
-    name: &'a str,
-    ty: GGmlType,
-    ndim: u32,
-    offset: usize,
-    shape: NonNull<u64>,
-}
-
-unsafe impl Sync for GGufTensorInfo<'_> {}
-
-impl PartialEq for GGufTensorInfo<'_> {
+impl<'a> GGufTensorMeta<'a> {
+    /// Creates a new [GGufTensorMeta] instance without performing any validation on the input data.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that the input data is valid for the [GGufTensorMeta] type.
     #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.name() == other.name()
+    pub const unsafe fn new_unchecked(data: &'a [u8]) -> Self {
+        Self(data)
     }
-}
 
-impl Eq for GGufTensorInfo<'_> {}
-
-impl Hash for GGufTensorInfo<'_> {
     #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.name().hash(state)
-    }
-}
-
-impl Drop for GGufTensorInfo<'_> {
-    #[inline]
-    fn drop(&mut self) {
-        unsafe {
-            dealloc(
-                self.shape.as_ptr().cast(),
-                Layout::array::<u64>(self.ndim as _).unwrap(),
-            )
-        }
-    }
-}
-
-impl<'a> GGufTensorInfo<'a> {
-    fn new(name: &'a str) -> Self {
-        unsafe {
-            let ptr = name.as_ptr().add(name.len());
-            let ndim = ptr.cast::<u32>().read_unaligned();
-            let layout = Layout::array::<u64>(ndim as _).unwrap();
-
-            let ptr = ptr.add(size_of::<u32>());
-            let shape_ = ptr;
-
-            let ptr = ptr.add(layout.size());
-            let ty = ptr.cast::<GGmlType>().read_unaligned();
-
-            let ptr = ptr.add(size_of::<u32>());
-            let offset = ptr.cast::<u64>().read_unaligned() as _;
-
-            let shape = alloc(layout).cast::<u64>();
-            copy_nonoverlapping(shape_, shape.cast(), layout.size());
-
-            Self {
-                name,
-                ty,
-                ndim,
-                offset,
-                shape: NonNull::new_unchecked(shape),
-            }
-        }
+    pub fn new(data: &'a [u8]) -> Result<Self, GGufReadError> {
+        GGufReader::new(data).read_tensor_meta()
     }
 
     #[inline]
     pub fn name(&self) -> &'a str {
-        self.name
+        let mut reader = GGufReader::new(self.0);
+        unsafe { reader.read_str_unchecked() }
     }
 
     #[inline]
-    pub fn shape(&self) -> &[u64] {
-        unsafe { from_raw_parts(self.shape.as_ptr(), self.ndim as _) }
-    }
+    pub fn to_info(&self) -> GGufTensorInfo {
+        let mut reader = GGufReader::new(self.0);
+        let ndim: u32 = reader.skip_str().unwrap().read().unwrap();
+        let layout = Layout::array::<u64>(ndim as _).unwrap();
+        let shape = unsafe {
+            let dst = alloc(layout);
+            copy_nonoverlapping(reader.remaining().as_ptr(), dst, layout.size());
+            NonNull::new_unchecked(dst).cast()
+        };
+        let ty = reader.skip::<u64>(ndim as _).unwrap().read().unwrap();
+        let offset = reader.read().unwrap();
 
+        GGufTensorInfo {
+            ty,
+            ndim,
+            shape,
+            offset,
+        }
+    }
+}
+
+pub struct GGufTensorInfo {
+    ty: GGmlType,
+    ndim: u32,
+    shape: NonNull<u64>,
+    offset: u64,
+}
+
+impl GGufTensorInfo {
     #[inline]
-    pub fn ggml_type(&self) -> GGmlType {
+    pub const fn ty(&self) -> GGmlType {
         self.ty
     }
 
     #[inline]
-    pub fn offset(&self) -> usize {
-        self.offset
+    pub const fn shape(&self) -> &[u64] {
+        unsafe { from_raw_parts(self.shape.as_ptr(), self.ndim as _) }
     }
 
     #[inline]
-    pub fn nbytes(&self) -> usize {
-        self.shape().iter().product::<u64>() as usize * self.ggml_type().nbytes()
+    pub const fn offset(&self) -> usize {
+        self.offset as _
+    }
+
+    #[inline]
+    pub const fn nbytes(&self) -> usize {
+        let mut ans = self.ty.nbytes();
+        let mut i = 0;
+        while i < self.ndim {
+            ans *= unsafe { self.shape.as_ptr().add(i as _).read() as usize };
+            i += 1;
+        }
+        ans
+    }
+}
+
+impl Drop for GGufTensorInfo {
+    fn drop(&mut self) {
+        let ptr = self.shape.as_ptr().cast();
+        let layout = Layout::array::<u64>(self.ndim as _).unwrap();
+        unsafe { dealloc(ptr, layout) }
     }
 }

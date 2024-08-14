@@ -1,6 +1,7 @@
-﻿mod internal;
+﻿mod file_writer;
 mod simulator;
 mod writer;
 
-pub use simulator::GGufSimulator;
-pub use writer::{GGufMetaWriter, GGufTensorWriter};
+pub use file_writer::{DataFuture, GGufFileWriter, GGufTensorWriter};
+pub use simulator::{GGufFileSimulator, GGufTensorSimulator};
+pub use writer::GGufWriter;

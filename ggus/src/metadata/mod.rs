@@ -1,15 +1,13 @@
 //! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
 
-mod general;
-mod llm;
-mod tokenizer;
+mod meta_kv;
 
-use crate::{GGufReadError, GGufReader};
-use indexmap::IndexMap;
-use std::{hash::Hash, slice::from_raw_parts};
+use crate::GGmlType;
 
-pub use general::{DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT};
-pub use tokenizer::{utok, GGufArray, GGufTokenType};
+pub use meta_kv::GGufMetaKV;
+
+pub const GENERAL_ALIGNMENT: &str = "general.alignment";
+pub const DEFAULT_ALIGNMENT: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
@@ -73,172 +71,23 @@ pub enum GGufFileType {
     MostlyQ6K = 18,
 }
 
-#[derive(Clone, Debug)]
-pub struct GGufMetaKVPairs<'a> {
-    indices: IndexMap<&'a str, usize>,
-    nbytes: usize,
-}
-
-impl<'a> GGufMetaKVPairs<'a> {
-    pub fn scan(count: u64, data: &'a [u8]) -> Result<Self, GGufReadError> {
-        let mut reader = GGufReader::new(data);
-        let mut indices = IndexMap::with_capacity(count as _);
-        for _ in 0..count {
-            let key = reader.read_str()?;
-            let ty = reader.read()?;
-            let begin = reader.cursor();
-            skip_value(ty, &mut reader, 1)?;
-            if indices.insert(key, reader.cursor() - begin).is_some() {
-                return Err(GGufReadError::DuplicatedKey(key.into()));
-            }
+impl GGufFileType {
+    pub fn to_ggml_type(self) -> GGmlType {
+        match self {
+            Self::AllF32 => GGmlType::F32,
+            Self::MostlyF16 => GGmlType::F16,
+            Self::MostlyQ4_0 => GGmlType::Q4_0,
+            Self::MostlyQ4_1 => GGmlType::Q4_1,
+            #[allow(deprecated)]
+            Self::MostlyQ4_2 => GGmlType::Q4_2,
+            #[allow(deprecated)]
+            Self::MostlyQ4_3 => GGmlType::Q4_3,
+            Self::MostlyQ8_0 => GGmlType::Q8_0,
+            Self::MostlyQ5_0 => GGmlType::Q5_0,
+            Self::MostlyQ51 => GGmlType::Q5_1,
+            Self::MostlyQ2K => GGmlType::Q2K,
+            Self::MostlyQ6K => GGmlType::Q6K,
+            _ => unimplemented!(),
         }
-        Ok(Self {
-            indices,
-            nbytes: reader.cursor(),
-        })
-    }
-
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.indices.len()
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.indices.is_empty()
-    }
-
-    #[inline]
-    pub fn keys<'s>(&'s self) -> impl Iterator<Item = &'a str> + 's {
-        self.indices.keys().copied()
-    }
-
-    #[inline]
-    pub fn kvs<'s>(&'s self) -> impl Iterator<Item = GGufMetaKV<'a>> + 's {
-        self.indices
-            .iter()
-            .map(|(&key, &len)| GGufMetaKV { key, len })
-    }
-
-    #[inline]
-    pub const fn nbytes(&self) -> usize {
-        self.nbytes
-    }
-
-    #[inline]
-    pub fn get(&self, key: impl AsRef<str>) -> Option<GGufMetaKV<'a>> {
-        self.indices
-            .get_key_value(key.as_ref())
-            .map(|(&key, &len)| GGufMetaKV { key, len })
-    }
-
-    #[inline]
-    pub fn contains(&self, key: impl AsRef<str>) -> bool {
-        self.indices.contains_key(key.as_ref())
-    }
-
-    fn get_typed(
-        &self,
-        name: impl AsRef<str>,
-        ty: GGufMetaDataValueType,
-    ) -> Option<GGufReader<'a>> {
-        self.get(name).map(|kv| {
-            assert_eq!(kv.ty(), ty);
-            kv.value_reader()
-        })
-    }
-}
-
-fn skip_value(
-    ty: GGufMetaDataValueType,
-    reader: &mut GGufReader,
-    len: usize,
-) -> Result<(), GGufReadError> {
-    use GGufMetaDataValueType as Ty;
-    match ty {
-        Ty::U8 => reader.skip::<u8>(len),
-        Ty::I8 => reader.skip::<i8>(len),
-        Ty::U16 => reader.skip::<u16>(len),
-        Ty::I16 => reader.skip::<i16>(len),
-        Ty::U32 => reader.skip::<u32>(len),
-        Ty::I32 => reader.skip::<i32>(len),
-        Ty::F32 => reader.skip::<f32>(len),
-        Ty::U64 => reader.skip::<u64>(len),
-        Ty::I64 => reader.skip::<i64>(len),
-        Ty::F64 => reader.skip::<f64>(len),
-
-        Ty::Bool => {
-            for _ in 0..len {
-                reader.read_bool()?;
-            }
-            Ok(())
-        }
-        Ty::String => {
-            for _ in 0..len {
-                reader.read_str()?;
-            }
-            Ok(())
-        }
-        Ty::Array => {
-            let (ty, len) = reader.read_arr_header()?;
-            skip_value(ty, reader, len)
-        }
-    }
-}
-
-pub struct GGufMetaKV<'a> {
-    key: &'a str,
-    len: usize,
-}
-
-impl PartialEq for GGufMetaKV<'_> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.key == other.key
-    }
-}
-
-impl Eq for GGufMetaKV<'_> {}
-
-impl Hash for GGufMetaKV<'_> {
-    #[inline]
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.key.hash(state)
-    }
-}
-
-impl<'a> GGufMetaKV<'a> {
-    #[inline]
-    pub fn key(&self) -> &'a str {
-        self.key
-    }
-
-    #[inline]
-    pub fn ty(&self) -> GGufMetaDataValueType {
-        unsafe {
-            self.key
-                .as_ptr()
-                .add(self.key.len())
-                .cast::<GGufMetaDataValueType>()
-                .read_unaligned()
-        }
-    }
-
-    #[inline]
-    pub fn value_bytes(&self) -> &'a [u8] {
-        unsafe {
-            from_raw_parts(
-                self.key
-                    .as_ptr()
-                    .add(self.key.len())
-                    .add(size_of::<GGufMetaDataValueType>()),
-                self.len,
-            )
-        }
-    }
-
-    #[inline]
-    pub fn value_reader(&self) -> GGufReader<'a> {
-        GGufReader::new(self.value_bytes())
     }
 }

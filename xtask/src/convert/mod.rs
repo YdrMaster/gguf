@@ -3,14 +3,14 @@ mod read;
 mod write;
 
 use crate::file_info::FileInfo;
-use ggus::{GGmlType, GGufError, GGufMetaDataValueType};
+use ggus::{GGmlType, GGufError, GGufMetaDataValueType, GGufReader};
 use indexmap::IndexMap;
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapMut};
 use read::read_files;
 use std::{
+    borrow::Cow,
     fs::File,
     io,
-    ops::Deref,
     path::PathBuf,
     sync::{Arc, LazyLock},
 };
@@ -79,7 +79,14 @@ struct Content<'a> {
 
 struct MetaValue<'a> {
     ty: GGufMetaDataValueType,
-    value: DataPromise<'a>,
+    value: Cow<'a, [u8]>,
+}
+
+impl MetaValue<'_> {
+    #[inline]
+    fn value_reader(&self) -> GGufReader {
+        GGufReader::new(&self.value)
+    }
 }
 
 struct Tensor<'a> {
@@ -89,31 +96,30 @@ struct Tensor<'a> {
 }
 
 #[derive(Clone)]
-#[repr(transparent)]
-struct DataPromise<'a>(Arc<dyn DataFuture + Send + Sync + 'a>);
+enum DataPromise<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Arc<[u8]>),
+    Lazy(Arc<dyn LazyData + Send + Sync + 'a>),
+}
 
-impl Deref for DataPromise<'_> {
-    type Target = [u8];
+impl ggus::DataFuture for DataPromise<'_> {
     #[inline]
-    fn deref(&self) -> &[u8] {
-        self.0.get()
+    fn get(&self) -> &[u8] {
+        match self {
+            Self::Borrowed(data) => data,
+            Self::Owned(data) => data,
+            Self::Lazy(data) => data.get(),
+        }
     }
 }
 
-trait DataFuture {
+trait LazyData {
     fn get(&self) -> &[u8];
 }
 
-impl DataFuture for &[u8] {
+impl<F: FnOnce() -> MmapMut> LazyData for LazyLock<MmapMut, F> {
     #[inline]
     fn get(&self) -> &[u8] {
         self
-    }
-}
-
-impl<F: FnOnce() -> Mmap> DataFuture for LazyLock<Mmap, F> {
-    #[inline]
-    fn get(&self) -> &[u8] {
-        &**self
     }
 }

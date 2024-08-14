@@ -1,29 +1,34 @@
-﻿use super::internal::GGufWriter;
-use crate::{pad, GGmlType, GGufFileHeader, GGufMetaDataValueType, DEFAULT_ALIGNMENT};
+﻿use super::GGufWriter;
+use crate::{pad, GGmlType, GGufMetaDataValueType, DEFAULT_ALIGNMENT};
 use std::io::{Result, Write};
 
-pub struct GGufSimulator {
+pub struct GGufFileSimulator {
+    writer: GGufWriter<NWrite>,
+    alignment: usize,
+}
+
+pub struct GGufTensorSimulator {
     writer: GGufWriter<NWrite>,
     alignment: usize,
     data: Vec<usize>,
     offset: usize,
 }
 
-impl Default for GGufSimulator {
+impl Default for GGufFileSimulator {
     #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl GGufSimulator {
+impl GGufFileSimulator {
     #[inline]
     pub fn new() -> Self {
+        let mut writer = GGufWriter::new(NWrite);
+        writer.write_header(Default::default()).unwrap();
         Self {
-            writer: GGufWriter::new(NWrite, GGufFileHeader::default()).unwrap(),
+            writer,
             alignment: DEFAULT_ALIGNMENT,
-            data: Vec::new(),
-            offset: 0,
         }
     }
 
@@ -36,7 +41,8 @@ impl GGufSimulator {
 
     #[inline]
     pub fn write_alignment(&mut self, alignment: usize) {
-        self.alignment = self.writer.write_alignment(alignment).unwrap();
+        self.writer.write_alignment(alignment).unwrap();
+        self.alignment = alignment;
     }
 
     #[inline]
@@ -46,6 +52,18 @@ impl GGufSimulator {
         }
     }
 
+    #[inline]
+    pub fn finish(self) -> GGufTensorSimulator {
+        GGufTensorSimulator {
+            writer: self.writer,
+            alignment: self.alignment,
+            data: Vec::new(),
+            offset: 0,
+        }
+    }
+}
+
+impl GGufTensorSimulator {
     pub fn write_tensor(&mut self, name: &str, ty: GGmlType, shape: &[u64]) {
         self.offset += pad(self.offset, self.alignment);
         self.writer

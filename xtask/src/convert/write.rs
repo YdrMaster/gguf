@@ -1,6 +1,6 @@
 ﻿use super::Content;
 use crate::{file_info::FileInfo, shards::Shards};
-use ggus::{GGufFileHeader, GGufMetaWriter, GGufSimulator};
+use ggus::{GGufFileHeader, GGufFileSimulator, GGufFileWriter};
 use std::{fs::File, io, iter::zip, path::Path, thread};
 
 impl Content<'_> {
@@ -20,16 +20,17 @@ impl Content<'_> {
 
         // 规划分片方案
 
-        let mut simulator = GGufSimulator::with_alignment(alignment);
+        let mut simulator = GGufFileSimulator::with_alignment(alignment);
         for (k, v) in &meta_kvs {
             simulator.write_meta_kv(k, v.ty, &v.value);
         }
 
+        let mut simulator = simulator.finish();
         let mut shards = vec![vec![]];
         for (name, tensor) in tensors {
             match &mut *shards {
                 [_] if split_no_tensor_first => {
-                    simulator = GGufSimulator::with_alignment(alignment);
+                    simulator = GGufFileSimulator::with_alignment(alignment).finish();
                     simulator.write_tensor(&name, tensor.ty, &tensor.shape);
                     shards.push(vec![(name, tensor)]);
                 }
@@ -40,7 +41,7 @@ impl Content<'_> {
                     {
                         current.push((name, tensor));
                     } else {
-                        simulator = GGufSimulator::with_alignment(alignment);
+                        simulator = GGufFileSimulator::with_alignment(alignment).finish();
                         simulator.write_tensor(&name, tensor.ty, &tensor.shape);
                         shards.push(vec![(name, tensor)]);
                     }
@@ -72,7 +73,7 @@ impl Content<'_> {
                         let n_tensors = tensors.len();
                         let header = GGufFileHeader::new(3, n_tensors as _, n_meta_kvs as _);
 
-                        let mut writer = GGufMetaWriter::new(File::create(&path)?, header)?;
+                        let mut writer = GGufFileWriter::new(File::create(&path)?, header)?;
                         writer.write_alignment(alignment)?;
                         if i == 0 {
                             for (k, v) in meta_kvs {

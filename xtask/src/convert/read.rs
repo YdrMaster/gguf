@@ -1,7 +1,6 @@
-﻿use std::sync::Arc;
-
-use super::{Content, DataPromise, MetaValue, Tensor};
+﻿use super::{Content, DataPromise, MetaValue, Tensor};
 use ggus::{GGuf, GGufError, GENERAL_ALIGNMENT};
+use std::borrow::Cow;
 
 impl<'a> Content<'a> {
     pub fn new(files: &[GGuf<'a>]) -> Self {
@@ -12,28 +11,28 @@ impl<'a> Content<'a> {
         };
 
         for f in files {
-            ans.alignment = ans.alignment.max(f.meta_kvs.alignment());
+            ans.alignment = ans.alignment.max(f.alignment);
 
-            for kv in f.meta_kvs.kvs() {
-                let key = kv.key();
-                if key != GENERAL_ALIGNMENT && !key.starts_with("split.") {
+            for (&k, kv) in &f.meta_kvs {
+                if k != GENERAL_ALIGNMENT && !k.starts_with("split.") {
                     ans.meta_kvs.insert(
-                        key.into(),
+                        k.into(),
                         MetaValue {
                             ty: kv.ty(),
-                            value: DataPromise(Arc::new(kv.value_bytes())),
+                            value: Cow::Borrowed(kv.value_bytes()),
                         },
                     );
                 }
             }
 
-            for tensor in f.tensors.iter() {
+            for (&name, tensor) in &f.tensors {
+                let tensor = tensor.to_info();
                 ans.tensors.insert(
-                    tensor.name().into(),
+                    name.into(),
                     Tensor {
-                        ty: tensor.ggml_type(),
+                        ty: tensor.ty(),
                         shape: tensor.shape().to_vec(),
-                        data: DataPromise(Arc::new(&f.data[tensor.offset()..][..tensor.nbytes()])),
+                        data: DataPromise::Borrowed(&f.data[tensor.offset()..][..tensor.nbytes()]),
                     },
                 );
             }
@@ -49,7 +48,7 @@ pub(super) fn read_files<'a>(
     std::thread::scope(|s| {
         files
             .into_iter()
-            .map(|data| s.spawn(|| GGuf::scan(data)))
+            .map(|data| s.spawn(|| GGuf::new(data)))
             .collect::<Vec<_>>()
             .into_iter()
             .map(|t| t.join().unwrap())

@@ -1,10 +1,13 @@
 ﻿use crate::{name_pattern::compile_patterns, shards::Shards, ERR, YES};
-use ggus::{
-    GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaKVPairs, GGufReadError, GGufReader,
-    GGufTensors,
-};
+use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufReadError, GGufReader};
+use indexmap::IndexMap;
+use memmap2::Mmap;
 use regex::Regex;
-use std::{fmt, fs::File, path::PathBuf};
+use std::{
+    fmt,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 #[derive(Args, Default)]
 pub struct ShowArgs {
@@ -46,69 +49,183 @@ impl ShowArgs {
         let filter_tensor = compile_patterns(&filter_tensor);
 
         let files = if shards {
-            Shards::from(&*file)
-                .iter_all()
-                .filter(|p| p.is_file())
-                .collect::<Vec<_>>()
-        } else if file.is_file() {
-            vec![file]
+            Shards::from(&*file).iter_all().collect::<Vec<_>>()
         } else {
-            vec![]
+            vec![file]
         };
 
-        if files.is_empty() {
-            eprintln!("{ERR}No file found.");
-            return;
-        }
+        for path in files {
+            let file = match File::open(&path) {
+                Ok(f) => unsafe { Mmap::map(&f) }.unwrap(),
+                Err(e) => {
+                    println!("{ERR}Failed to open file: {e:?}");
+                    continue;
+                }
+            };
 
-        for file in files {
-            let file_name = file.file_name().unwrap().to_str().unwrap();
-            println!(
-                "\
+            show_file_name(&path);
+
+            let mut reader = GGufReader::new(&file);
+
+            let header = match show_header(&mut reader) {
+                Ok(header) => header,
+                Err(Failed) => {
+                    println!();
+                    continue;
+                }
+            };
+
+            match show_meta_kvs(
+                &mut reader,
+                header.metadata_kv_count as _,
+                &filter_meta,
+                detail,
+            ) {
+                Ok(a) => a,
+                Err(Failed) => {
+                    println!();
+                    continue;
+                }
+            };
+
+            if header.tensor_count > 0 {
+                let _ = show_tensors(&mut reader, header.tensor_count as _, &filter_tensor);
+            }
+        }
+    }
+}
+
+fn show_file_name(path: &Path) {
+    let file_name = path.file_name().unwrap().to_str().unwrap();
+    println!(
+        "\
 +-{0:-<1$}-+
 | {file_name} |
 +-{0:-<1$}-+
 ",
-                "",
-                file_name.len()
-            );
+        "",
+        file_name.len(),
+    );
+}
 
-            let file = File::open(file).unwrap();
-            let file = unsafe { memmap2::Mmap::map(&file) }.unwrap();
+fn show_header(reader: &mut GGufReader) -> Result<GGufFileHeader, Failed> {
+    show_title("Header");
 
-            let header = unsafe { file.as_ptr().cast::<GGufFileHeader>().read() };
-            if let Err(Failed) = show_header(&header) {
-                println!();
-                continue;
+    let header = match reader.read_header() {
+        Ok(header) => header,
+        Err(e) => {
+            println!("{ERR} Failed to read header: {e:?}");
+            return Err(Failed);
+        }
+    };
+
+    if header.is_magic_correct() {
+        println!("{YES}Magic   = {:?}", header.magic().unwrap());
+    } else {
+        println!("{ERR}Magic   = {:?}", header.magic());
+        return Err(Failed);
+    }
+    let native_endian = if u16::from_le(1) == 1 {
+        "Little"
+    } else if u16::from_be(1) == 1 {
+        "Big"
+    } else {
+        "Unknown"
+    };
+    if header.is_native_endian() {
+        println!("{YES}Endian  = {native_endian}");
+    } else {
+        println!("{ERR}Endian  = {native_endian}");
+        return Err(Failed);
+    }
+    if header.version == 3 {
+        println!("{YES}Version = {}", header.version);
+    } else {
+        println!("{ERR}Version = {}", header.version);
+        return Err(Failed);
+    }
+    println!("{YES}MetaKVs = {}", header.metadata_kv_count);
+    println!("{YES}Tensors = {}", header.tensor_count);
+    println!();
+    Ok(header)
+}
+
+fn show_meta_kvs(
+    reader: &mut GGufReader,
+    count: usize,
+    filter: &Regex,
+    detail: usize,
+) -> Result<(), Failed> {
+    let mut width = 0;
+    let mut meta_kvs = IndexMap::new();
+    for _ in 0..count {
+        let kv = match reader.read_meta_kv() {
+            Ok(kv) => kv,
+            Err(e) => {
+                println!("{ERR}Failed to read meta kv: {e:?}");
+                return Err(Failed);
             }
-
-            let cursor = header.nbytes();
-            let kvs = match GGufMetaKVPairs::scan(header.metadata_kv_count, &file[cursor..]) {
-                Ok(kvs) => kvs,
-                Err(e) => {
-                    eprintln!("{ERR}{e:?}");
-                    println!();
-                    continue;
-                }
-            };
-            if show_meta_kvs(&kvs, &filter_meta, detail).is_err() {
-                println!();
-                continue;
-            }
-
-            let cursor = cursor + kvs.nbytes();
-            let tensors = match GGufTensors::scan(header.tensor_count, &file[cursor..]) {
-                Ok(tensors) => tensors,
-                Err(e) => {
-                    eprintln!("{ERR}{e:?}");
-                    println!();
-                    continue;
-                }
-            };
-            let _ = show_tensors(&tensors, &filter_tensor);
-            println!();
+        };
+        let k = kv.key();
+        if meta_kvs.contains_key(k) {
+            println!("{ERR}Duplicate meta key: {k}");
+            return Err(Failed);
+        }
+        if filter.is_match(k) {
+            width = k.len().max(width);
+            meta_kvs.insert(k, kv);
         }
     }
+
+    if !meta_kvs.is_empty() {
+        show_title("Meta KV");
+        for (_, kv) in meta_kvs {
+            show_meta_kv(kv, width, detail)?;
+        }
+        println!();
+    }
+
+    Ok(())
+}
+
+fn show_tensors(reader: &mut GGufReader, count: usize, filter: &Regex) -> Result<(), Failed> {
+    let mut name_width = 0;
+    let mut off_width = 0;
+    let mut tensors = IndexMap::new();
+    for _ in 0..count {
+        let tensor = match reader.read_tensor_meta() {
+            Ok(t) => t,
+            Err(e) => {
+                println!("{ERR}Failed to read tensor: {e:?}");
+                return Err(Failed);
+            }
+        };
+        let name = tensor.name();
+        if tensors.contains_key(name) {
+            println!("{ERR}Duplicate tensor name: {name}");
+            return Err(Failed);
+        }
+        if filter.is_match(name) {
+            let info = tensor.to_info();
+            name_width = name.len().max(name_width);
+            off_width = info.offset().to_string().len().max(off_width);
+            tensors.insert(name, info);
+        }
+    }
+
+    if !tensors.is_empty() {
+        show_title("Tensors");
+        for (name, info) in tensors {
+            println!(
+                "{YES}{name:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
+                info.ty(),
+                info.offset(),
+                info.shape(),
+            );
+        }
+    }
+
+    Ok(())
 }
 
 fn show_title(title: &str) {
@@ -122,57 +239,6 @@ fn show_title(title: &str) {
     );
 }
 
-fn show_header(header: &GGufFileHeader) -> Result<(), Failed> {
-    show_title("Header");
-
-    if header.is_magic_correct() {
-        println!("{YES}Magic   = {:?}", header.magic().unwrap());
-    } else {
-        eprintln!("{ERR}Magic   = {:?}", header.magic());
-        return Err(Failed);
-    }
-    let native_endian = if u16::from_le(1) == 1 {
-        "Little"
-    } else if u16::from_be(1) == 1 {
-        "Big"
-    } else {
-        "Unknown"
-    };
-    if header.is_native_endian() {
-        println!("{YES}Endian  = {native_endian}");
-    } else {
-        eprintln!("{ERR}Endian  = {native_endian}");
-        return Err(Failed);
-    }
-    if header.version == 3 {
-        println!("{YES}Version = {}", header.version);
-    } else {
-        eprintln!("{ERR}Version = {}", header.version);
-        return Err(Failed);
-    }
-    println!("{YES}MetaKVs = {}", header.metadata_kv_count);
-    println!("{YES}Tensors = {}", header.tensor_count);
-    println!();
-    Ok(())
-}
-
-fn show_meta_kvs(kvs: &GGufMetaKVPairs, filter: &Regex, detail: usize) -> Result<(), Failed> {
-    let kvs = kvs
-        .kvs()
-        .filter(move |m| filter.is_match(m.key()))
-        .collect::<Vec<_>>();
-
-    if let Some(width) = kvs.iter().map(|kv| kv.key().len()).max() {
-        show_title("Meta KV");
-        for kv in kvs {
-            show_meta_kv(kv, width, detail)?;
-        }
-        println!();
-    }
-
-    Ok(())
-}
-
 fn show_meta_kv(kv: GGufMetaKV, width: usize, detail: usize) -> Result<(), Failed> {
     let key = kv.key();
     let ty = kv.ty();
@@ -184,7 +250,7 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize, detail: usize) -> Result<(), Faile
             Ok(())
         }
         Err(e) => {
-            eprintln!("{ERR}{key:·<width$} {e:?}");
+            println!("{ERR}{key:·<width$} {e:?}");
             Err(Failed)
         }
     }
@@ -268,29 +334,5 @@ fn fmt_meta_val(
             buf.push_str(&format!("...({} more)]", len - detail));
         }
     }
-    Ok(())
-}
-
-fn show_tensors(tensors: &GGufTensors, filter: &Regex) -> Result<(), Failed> {
-    let tensors = tensors
-        .iter()
-        .filter(move |t| filter.is_match(t.name()))
-        .collect::<Vec<_>>();
-
-    if let Some(name_width) = tensors.iter().map(|t| t.name().len()).max() {
-        show_title("Tensors");
-        let tensors = tensors.iter().collect::<Vec<_>>();
-        let off_width = tensors.last().unwrap().offset().to_string().len() + 1;
-        for t in tensors {
-            println!(
-                "{YES}{:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
-                t.name(),
-                t.ggml_type(),
-                t.offset(),
-                t.shape(),
-            );
-        }
-    }
-
     Ok(())
 }
