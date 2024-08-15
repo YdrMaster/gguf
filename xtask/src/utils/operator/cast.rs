@@ -6,7 +6,6 @@ use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterato
 use std::{
     alloc::Layout,
     slice::{from_raw_parts, from_raw_parts_mut},
-    sync::{Arc, LazyLock},
 };
 
 impl Operator {
@@ -31,7 +30,7 @@ impl Content<'_> {
                 let data = tensor.data.clone();
 
                 tensor.ty = ty;
-                tensor.data = DataPromise::Lazy(Arc::new(LazyLock::new(move || {
+                tensor.data = DataPromise::lazy(move || {
                     use GGmlType as Ty;
                     let data = data.get();
                     match (from, to) {
@@ -39,7 +38,7 @@ impl Content<'_> {
                         (Ty::F16, Ty::F32) => cast(data, |&x| f16::to_f32(x)),
                         (_, _) => todo!("unsupported cast: {from:?} -> {to:?}"),
                     }
-                })));
+                });
             }
         }
 

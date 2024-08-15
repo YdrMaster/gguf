@@ -46,6 +46,8 @@ impl ConvertArgs {
                     Operator::cast(content)
                 } else if let Some(content) = op.strip_prefix("transpose:") {
                     Operator::transpose_linear(content)
+                } else if let Some(content) = op.strip_prefix("merge:") {
+                    Operator::merge_linear(content)
                 } else {
                     panic!("Unsupported operation: {}", op)
                 }

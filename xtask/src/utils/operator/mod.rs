@@ -1,4 +1,5 @@
 ﻿mod cast;
+mod merge;
 mod transpose;
 
 use super::{compile_patterns, Content, DataPromise};
@@ -10,7 +11,7 @@ pub(crate) enum Operator {
     FilterTensorName(Regex),
     Cast(GGmlType),
     TransposeLinear(bool),
-    ConcatLinear,
+    MergeLinear(bool),
 }
 
 impl Operator {
@@ -32,29 +33,15 @@ impl Content<'_> {
             FilterMetaKey(r) => self.meta_kvs.retain(|k, _| r.is_match(k)),
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
             Cast(ty) => self.cast(ty),
-            TransposeLinear(mode) => self.transpose_linear(mode),
-            ConcatLinear => self.concat_linear(),
+            TransposeLinear(ty) => self.transpose_linear(ty),
+            MergeLinear(ty) => self.merge_linear(ty),
         }
-    }
-
-    fn concat_linear(&mut self) {
-        self.assert_llama();
-
-        let _blk = self
-            .meta_kvs
-            .get("llama.block_count")
-            .expect("missing block count")
-            .value_reader()
-            .read::<u64>()
-            .unwrap_or_else(|e| panic!("failed to read block count: {e:?}"));
-
-        todo!()
     }
 
     fn assert_llama(&self) {
         match self
             .meta_kvs
-            .get("general.architecture")
+            .get(GENERAL_ARCHITECTURE)
             .expect("missing architecture")
             .value_reader()
             .read_str()
@@ -65,3 +52,9 @@ impl Content<'_> {
         }
     }
 }
+
+const GENERAL_ARCHITECTURE: &str = "general.architecture";
+const LLAMA_BLOCK_COUNT: &str = "llama.block_count";
+const LLAMA_TENSOR_DATA_LAYOUT: &str = "llama.tensor_data_layout";
+const LAYOUT_TRANSPOSED: &str = "transposed";
+const LAYOUT_REFERENCE: &str = "reference";

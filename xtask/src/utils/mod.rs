@@ -87,6 +87,12 @@ enum DataPromise<'a> {
     Lazy(Arc<dyn LazyData + Send + Sync + 'a>),
 }
 
+impl<'a> DataPromise<'a> {
+    fn lazy(f: impl FnOnce() -> MmapMut + Send + Sync + 'a) -> Self {
+        Self::Lazy(Arc::new(LazyLock::new(f)))
+    }
+}
+
 impl ggus::DataFuture for DataPromise<'_> {
     #[inline]
     fn get(&self) -> &[u8] {

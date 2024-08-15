@@ -1,30 +1,19 @@
-﻿use super::{Content, Operator};
-use crate::utils::{DataPromise, MetaValue};
+﻿use super::{Content, Operator, LAYOUT_REFERENCE, LAYOUT_TRANSPOSED};
+use crate::utils::{operator::LLAMA_TENSOR_DATA_LAYOUT, DataPromise, MetaValue};
 use ggus::{DataFuture, GGufMetaDataValueType, GGufWriter};
 use memmap2::MmapMut;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::{
-    borrow::Cow,
-    sync::{Arc, LazyLock},
-};
+use regex::Regex;
+use std::borrow::Cow;
 
 impl Operator {
     pub fn transpose_linear(m: impl AsRef<str>) -> Self {
         let m = m.as_ref().trim();
         Self::TransposeLinear(match m.to_lowercase().as_str() {
-            "transposed" | "yes" | "y" | "true" | "t" => true,
-            "ref" | "reference" | "default" | "no" | "n" | "false" | "f" => false,
+            LAYOUT_TRANSPOSED | "yes" | "y" | "true" | "t" => true,
+            LAYOUT_REFERENCE | "ref" | "default" | "no" | "n" | "false" | "f" => false,
             _ => panic!("unsupported transpose type: {m}"),
         })
-    }
-}
-
-#[inline]
-const fn layout_str(ty: bool) -> &'static str {
-    if ty {
-        "transposed"
-    } else {
-        "reference"
     }
 }
 
@@ -34,7 +23,13 @@ fn layout_meta_value<'a>(ty: bool) -> MetaValue<'a> {
         ty: GGufMetaDataValueType::String,
         value: {
             let mut buf = Vec::new();
-            GGufWriter::new(&mut buf).write_str(layout_str(ty)).unwrap();
+            GGufWriter::new(&mut buf)
+                .write_str(if ty {
+                    LAYOUT_TRANSPOSED
+                } else {
+                    LAYOUT_REFERENCE
+                })
+                .unwrap();
             Cow::Owned(buf)
         },
     }
@@ -45,10 +40,20 @@ impl Content<'_> {
         self.assert_llama();
 
         use indexmap::map::Entry::*;
-        match self.meta_kvs.entry("llama.tensor_data_layout".into()) {
+        match self.meta_kvs.entry(LLAMA_TENSOR_DATA_LAYOUT.into()) {
             Occupied(mut entry) => {
-                if entry.get().value_reader().read_str().unwrap() == layout_str(ty) {
-                    return;
+                match entry.get().value_reader().read_str().unwrap() {
+                    LAYOUT_TRANSPOSED => {
+                        if ty {
+                            return;
+                        }
+                    }
+                    LAYOUT_REFERENCE => {
+                        if !ty {
+                            return;
+                        }
+                    }
+                    x => panic!("unsupported tensor data layout: {x}"),
                 }
                 *entry.get_mut() = layout_meta_value(ty);
             }
@@ -60,15 +65,17 @@ impl Content<'_> {
             }
         }
 
+        let regex = Regex::new(r"^blk\.\d+\.(\w+)\.weight$").unwrap();
         for (name, tensor) in self.tensors.as_mut_slice() {
             let &[r, c] = tensor.shape.as_slice() else {
                 continue;
             };
-            if !name.starts_with("blk.")
-                || name.ends_with(".attn_output.weight")
-                || name.ends_with(".ffn_down.weight")
-            {
-                continue;
+            match regex.captures(name) {
+                Some(captures) => match &captures[1] {
+                    "attn_output" | "ffn_down" => continue,
+                    _ => {}
+                },
+                None => continue,
             }
 
             let data = tensor.data.clone();
@@ -78,17 +85,17 @@ impl Content<'_> {
             let r = r as usize;
             let c = c as usize;
 
-            tensor.data = DataPromise::Lazy(Arc::new(LazyLock::new(move || {
+            tensor.data = DataPromise::lazy(move || {
                 let src = data.get();
-                let dst = MmapMut::map_anon(src.len()).unwrap();
-                let ptr = dst.as_ptr() as usize;
+                let mut dst = MmapMut::map_anon(src.len()).unwrap();
+                let ptr = dst.as_mut_ptr() as usize;
                 (0..r * c).into_par_iter().for_each(|i| {
                     let src = src[(i % r * c) + i / r..].as_ptr();
                     let dst = (ptr + i) as *mut u8;
                     unsafe { std::ptr::copy_nonoverlapping(src, dst, count) };
                 });
                 dst
-            })));
+            });
         }
     }
 }
