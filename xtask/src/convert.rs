@@ -44,13 +44,15 @@ impl ConvertArgs {
                     Operator::filter_tensor_name(content)
                 } else if let Some(content) = op.strip_prefix("cast:") {
                     Operator::cast(content)
+                } else if let Some(content) = op.strip_prefix("transpose:") {
+                    Operator::transpose_linear(content)
                 } else {
                     panic!("Unsupported operation: {}", op)
                 }
             }),
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: shards.name.into(),
+                name: format!("{}.convert", shards.name),
                 shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
                 shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
                 shard_no_tensor_first: no_tensor_first,

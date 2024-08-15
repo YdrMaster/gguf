@@ -4,17 +4,16 @@
     num::ParseIntError,
     path::PathBuf,
     str::{from_utf8, FromStr},
-    usize,
 };
 
-pub struct FileInfo {
+pub(crate) struct FileInfo {
     pub path: PathBuf,
     pub n_tensors: usize,
     pub n_meta_kvs: usize,
     pub n_bytes: usize,
 }
 
-pub fn show_file_info(file_info: &[FileInfo]) {
+pub(crate) fn show_file_info(file_info: &[FileInfo]) {
     if file_info.is_empty() {
         return;
     }

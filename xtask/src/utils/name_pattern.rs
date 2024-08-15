@@ -2,7 +2,7 @@
 use std::{borrow::Cow, fmt, sync::OnceLock};
 
 #[inline]
-pub fn compile_patterns(patterns: &str) -> Regex {
+pub(crate) fn compile_patterns(patterns: &str) -> Regex {
     Regex::new(&format!("{}", Patterns(patterns))).unwrap()
 }
 

@@ -23,7 +23,7 @@ pub(crate) use name_pattern::compile_patterns;
 pub(crate) use operator::Operator;
 pub(crate) use shards::Shards;
 
-pub struct OutputConfig {
+pub(crate) struct OutputConfig {
     pub dir: PathBuf,
     pub name: String,
     pub shard_max_tensor_count: usize,
@@ -33,30 +33,28 @@ pub struct OutputConfig {
 
 #[allow(dead_code)]
 #[derive(Debug)]
-pub enum ConvertError {
+pub(crate) enum OperateError {
     GGuf(GGufError),
     Io(io::Error),
 }
 
-pub fn operate<T: AsRef<Path>>(
+pub(crate) fn operate<T: AsRef<Path>>(
     input_files: impl IntoIterator<Item = T>,
     operations: impl IntoIterator<Item = Operator>,
     out: OutputConfig,
-) -> Result<Vec<FileInfo>, ConvertError> {
+) -> Result<Vec<FileInfo>, OperateError> {
     let files = input_files
         .into_iter()
         .map(|path| File::open(path).and_then(|f| unsafe { Mmap::map(&f) }))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(ConvertError::Io)?;
-    let files = read_files(files.iter().map(|m| &**m)).map_err(ConvertError::GGuf)?;
+        .map_err(OperateError::Io)?;
 
+    let files = read_files(files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
     let mut content = Content::new(&files);
-
     for op in operations {
         content.apply(op);
     }
-
-    content.write_files(out).map_err(ConvertError::Io)
+    content.write_files(out).map_err(OperateError::Io)
 }
 
 struct Content<'a> {

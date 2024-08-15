@@ -19,6 +19,7 @@ pub use read::{GGufReadError, GGufReader};
 pub use tensor::{GGmlType, GGufTensorInfo, GGufTensorMeta};
 pub use write::{
     DataFuture, GGufFileSimulator, GGufFileWriter, GGufTensorSimulator, GGufTensorWriter,
+    GGufWriter,
 };
 
 #[inline(always)]
