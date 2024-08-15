@@ -1,11 +1,9 @@
 mod convert;
-mod file_info;
 mod filter;
 mod merge;
-mod name_pattern;
-mod shards;
 mod show;
 mod split;
+mod utils;
 
 #[macro_use]
 extern crate clap;
@@ -18,6 +16,7 @@ fn main() {
         Split(args) => args.split(),
         Merge(args) => args.merge(),
         Filter(args) => args.filter(),
+        Convert(args) => args.convert(),
     }
 }
 
@@ -35,7 +34,5 @@ enum Commands {
     Split(split::SplitArgs),
     Merge(merge::MergeArgs),
     Filter(filter::FilterArgs),
+    Convert(convert::ConvertArgs),
 }
-
-const YES: &str = "✔️  ";
-const ERR: &str = "❌  ";

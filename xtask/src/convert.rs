@@ -1,13 +1,16 @@
-﻿use crate::utils::{operate, show_file_info, OutputConfig, Shards};
+﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig, Shards};
 use std::path::PathBuf;
 
 #[derive(Args, Default)]
-pub struct SplitArgs {
+pub struct ConvertArgs {
     /// File to split
     file: PathBuf,
     /// Output directory for splited shards
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
+    /// Operations to apply, separated by "->"
+    #[clap(long)]
+    ops: String,
     /// Max count of tensors per shard
     #[clap(long, short = 't')]
     max_tensors: Option<usize>,
@@ -19,25 +22,32 @@ pub struct SplitArgs {
     no_tensor_first: bool,
 }
 
-impl SplitArgs {
-    pub fn split(self) {
+impl ConvertArgs {
+    pub fn convert(self) {
         let Self {
             file,
             output_dir,
+            ops,
             max_tensors,
             max_bytes,
             no_tensor_first,
         } = self;
 
         let shards = Shards::from(&*file);
-        if shards.count > 1 {
-            println!("Model has already been splited");
-            return;
-        }
-
         let files = operate(
-            [&file],
-            [],
+            shards.iter_all(),
+            ops.split("->").map(|op| {
+                let op = op.trim();
+                if let Some(content) = op.strip_prefix("filter-meta:") {
+                    Operator::filter_meta_key(content)
+                } else if let Some(content) = op.strip_prefix("filter-tensor:") {
+                    Operator::filter_tensor_name(content)
+                } else if let Some(content) = op.strip_prefix("cast:") {
+                    Operator::cast(content)
+                } else {
+                    panic!("Unsupported operation: {}", op)
+                }
+            }),
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
                 name: shards.name.into(),

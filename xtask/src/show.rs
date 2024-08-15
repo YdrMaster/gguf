@@ -1,4 +1,4 @@
-﻿use crate::{name_pattern::compile_patterns, shards::Shards, ERR, YES};
+﻿use crate::utils::{compile_patterns, Shards};
 use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufReadError, GGufReader};
 use indexmap::IndexMap;
 use memmap2::Mmap;
@@ -8,6 +8,9 @@ use std::{
     fs::File,
     path::{Path, PathBuf},
 };
+
+const YES: &str = "✔️  ";
+const ERR: &str = "❌  ";
 
 #[derive(Args, Default)]
 pub struct ShowArgs {

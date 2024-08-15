@@ -1,5 +1,4 @@
-﻿use super::Content;
-use crate::{convert::DataPromise, name_pattern::compile_patterns};
+﻿use super::{compile_patterns, Content, DataPromise};
 use ggus::{DataFuture, GGmlType};
 use half::f16;
 use memmap2::MmapMut;
@@ -11,7 +10,7 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
-pub enum Operator {
+pub(crate) enum Operator {
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
     Cast(GGmlType),
@@ -28,6 +27,15 @@ impl Operator {
     #[inline]
     pub fn filter_tensor_name(p: impl AsRef<str>) -> Self {
         Self::FilterTensorName(compile_patterns(p.as_ref()))
+    }
+
+    pub fn cast(t: impl AsRef<str>) -> Self {
+        let t = t.as_ref();
+        Self::Cast(match t.to_lowercase().as_str() {
+            "f16" | "fp16" | "half" => GGmlType::F16,
+            "f32" | "fp32" | "float" => GGmlType::F32,
+            _ => panic!("unsupported cast type: {t}"),
+        })
     }
 }
 
@@ -96,7 +104,7 @@ impl Content<'_> {
             })
             .unwrap_or("reference");
 
-        if layout.split(';').any(|s| s == "transposed") {
+        if layout.split('+').any(|s| s == "transposed") {
             return;
         }
 

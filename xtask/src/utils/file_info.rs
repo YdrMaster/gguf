@@ -1,4 +1,11 @@
-﻿use std::{cmp::max, fmt, path::PathBuf};
+﻿use std::{
+    cmp::max,
+    fmt,
+    num::ParseIntError,
+    path::PathBuf,
+    str::{from_utf8, FromStr},
+    usize,
+};
 
 pub struct FileInfo {
     pub path: PathBuf,
@@ -56,7 +63,40 @@ pub fn show_file_info(file_info: &[FileInfo]) {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(transparent)]
-struct MemSize(pub usize);
+pub(crate) struct MemSize(usize);
+
+impl Default for MemSize {
+    #[inline]
+    fn default() -> Self {
+        Self(usize::MAX)
+    }
+}
+
+impl MemSize {
+    #[inline]
+    pub const fn nbytes(self) -> usize {
+        self.0
+    }
+}
+
+impl FromStr for MemSize {
+    type Err = ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        #[inline]
+        fn parse_size_num(num: &[u8], k: usize) -> Result<usize, ParseIntError> {
+            from_utf8(num).unwrap().parse().map(|n: usize| n << k)
+        }
+
+        match s.trim().as_bytes() {
+            [num @ .., b'G'] => parse_size_num(num, 30),
+            [num @ .., b'M'] => parse_size_num(num, 20),
+            [num @ .., b'K'] => parse_size_num(num, 10),
+            num => parse_size_num(num, 0),
+        }
+        .map(Self)
+    }
+}
 
 impl fmt::Display for MemSize {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

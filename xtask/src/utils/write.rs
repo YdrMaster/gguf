@@ -1,22 +1,21 @@
-﻿use super::Content;
-use crate::{file_info::FileInfo, shards::Shards};
+﻿use super::{Content, FileInfo, OutputConfig, Shards};
 use ggus::{GGufFileHeader, GGufFileSimulator, GGufFileWriter};
-use std::{fs::File, io, iter::zip, path::Path, thread};
+use std::{fs::File, io, iter::zip, thread};
 
 impl Content<'_> {
-    pub fn write_files(
-        self,
-        output_dir: &Path,
-        output_name: &str,
-        split_tensor_count: usize,
-        split_file_size: usize,
-        split_no_tensor_first: bool,
-    ) -> Result<Vec<FileInfo>, io::Error> {
+    pub fn write_files(self, out: OutputConfig) -> Result<Vec<FileInfo>, io::Error> {
         let Self {
             alignment,
             meta_kvs,
             tensors,
         } = self;
+        let OutputConfig {
+            dir,
+            name,
+            shard_max_tensor_count,
+            shard_max_file_size,
+            shard_no_tensor_first,
+        } = out;
 
         // 规划分片方案
 
@@ -29,15 +28,15 @@ impl Content<'_> {
         let mut shards = vec![vec![]];
         for (name, tensor) in tensors {
             match &mut *shards {
-                [_] if split_no_tensor_first => {
+                [_] if shard_no_tensor_first => {
                     simulator = GGufFileSimulator::with_alignment(alignment).finish();
                     simulator.write_tensor(&name, tensor.ty, &tensor.shape);
                     shards.push(vec![(name, tensor)]);
                 }
                 [.., current] => {
                     simulator.write_tensor(&name, tensor.ty, &tensor.shape);
-                    if current.len() < split_tensor_count
-                        && simulator.written_bytes() < split_file_size
+                    if current.len() < shard_max_tensor_count
+                        && simulator.written_bytes() < shard_max_file_size.nbytes()
                     {
                         current.push((name, tensor));
                     } else {
@@ -54,8 +53,8 @@ impl Content<'_> {
 
         let meta_kvs = &meta_kvs;
         let names = Shards {
-            dir: output_dir,
-            name: output_name,
+            dir: &dir,
+            name: &name,
             index: 0,
             count: shards.len(),
             format: 5,
@@ -63,7 +62,7 @@ impl Content<'_> {
 
         // 并行写入文件
 
-        std::fs::create_dir_all(output_dir)?;
+        std::fs::create_dir_all(&dir)?;
         thread::scope(|s| {
             zip(shards, names)
                 .enumerate()
