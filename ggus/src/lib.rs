@@ -1,5 +1,5 @@
 #![doc = include_str!("../README.md")]
-// #![deny(warnings)]
+#![deny(warnings)]
 
 mod file;
 mod header;
