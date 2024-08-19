@@ -1,7 +1,4 @@
-﻿use super::{
-    super::Tensor, Content, DataPromise, Operator, LAYOUT_REFERENCE, LAYOUT_TRANSPOSED,
-    LLAMA_BLOCK_COUNT, LLAMA_TENSOR_DATA_LAYOUT,
-};
+﻿use super::{super::Tensor, Content, DataPromise, Operator, LLAMA_BLOCK_COUNT};
 use ggus::DataFuture;
 use indexmap::IndexMap;
 use memmap2::MmapMut;
@@ -24,17 +21,9 @@ impl Content<'_> {
         self.assert_llama();
 
         if self.tensors.contains_key("blk.0.attn_qkv.weight") == ty {
+            assert_eq!(self.tensors.contains_key("blk.0.ffn_gate_up.weight"), ty);
             return;
         }
-
-        let transposed = self
-            .meta_kvs
-            .get(LLAMA_TENSOR_DATA_LAYOUT)
-            .map_or(false, |kv| match kv.value_reader().read_str().unwrap() {
-                LAYOUT_TRANSPOSED => true,
-                LAYOUT_REFERENCE => false,
-                x => panic!("unsupported tensor data layout: {x}"),
-            });
 
         if ty {
             let blk = self
@@ -43,15 +32,15 @@ impl Content<'_> {
                 .map(|kv| kv.value_reader().read::<u32>().unwrap())
                 .expect("missing block count");
 
-            self.merge(transposed, blk as _);
+            self.merge(blk as _);
         } else {
-            self.split(transposed);
+            self.split();
         }
     }
 
-    fn merge(&mut self, transposed: bool, blk: usize) {
-        let mut qkv = MergeCollector::<3>::new(blk, transposed);
-        let mut gate_up = MergeCollector::<2>::new(blk, transposed);
+    fn merge(&mut self, blk: usize) {
+        let mut qkv = MergeCollector::<3>::new(blk);
+        let mut gate_up = MergeCollector::<2>::new(blk);
 
         let tensors = std::mem::take(&mut self.tensors);
         for (name, tensor) in tensors {
@@ -72,7 +61,7 @@ impl Content<'_> {
         }
     }
 
-    fn split(&mut self, transposed: bool) {
+    fn split(&mut self) {
         let tensors = std::mem::take(&mut self.tensors);
         for (name, tensor) in tensors {
             let Some(captures) = REGEX.captures(&name) else {
@@ -82,14 +71,14 @@ impl Content<'_> {
             match &captures[2] {
                 "attn_qkv" => {
                     let i: usize = captures[1].parse().unwrap();
-                    let (q, k, v) = split_qkv(&tensor, transposed);
+                    let (q, k, v) = split_qkv(&tensor);
                     self.tensors.insert(format!("blk.{i}.attn_q.weight"), q);
                     self.tensors.insert(format!("blk.{i}.attn_k.weight"), k);
                     self.tensors.insert(format!("blk.{i}.attn_v.weight"), v);
                 }
                 "ffn_gate_up" => {
                     let i: usize = captures[1].parse().unwrap();
-                    let (gate, up) = split_gate_up(&tensor, transposed);
+                    let (gate, up) = split_gate_up(&tensor);
                     self.tensors
                         .insert(format!("blk.{i}.ffn_gate.weight"), gate);
                     self.tensors.insert(format!("blk.{i}.ffn_up.weight"), up);
@@ -109,14 +98,12 @@ struct Blk<'a, const N: usize>([Option<Tensor<'a>>; N]);
 
 struct MergeCollector<'a, const N: usize> {
     buf: Vec<Blk<'a, N>>,
-    transposed: bool,
 }
 
 impl<'a> MergeCollector<'a, 3> {
-    fn new(blk: usize, transposed: bool) -> Self {
+    fn new(blk: usize) -> Self {
         Self {
             buf: (0..blk).map(|_| Blk([None, None, None])).collect(),
-            transposed,
         }
     }
 
@@ -139,64 +126,59 @@ impl<'a> MergeCollector<'a, 3> {
         let k = qkv.0[1].take().unwrap();
         let v = qkv.0[2].take().unwrap();
 
-        if self.transposed {
-            let &[qr, c] = &*q.shape else {
-                panic!("invalid q shape: {:?}", q.shape);
-            };
-            let &[kr, kc] = &*k.shape else {
-                panic!("invalid k shape: {:?}", k.shape);
-            };
-            let &[vr, vc] = &*v.shape else {
-                panic!("invalid v shape: {:?}", v.shape);
-            };
-            assert_eq!(qr % kr, 0);
-            assert!(qr >= kr);
-            assert_eq!(kr, vr);
-            assert_eq!(kc, c);
-            assert_eq!(vc, c);
+        let &[c, qr] = &*q.shape else {
+            panic!("invalid q shape: {:?}", q.shape);
+        };
+        let &[kc, kr] = &*k.shape else {
+            panic!("invalid k shape: {:?}", k.shape);
+        };
+        let &[vc, vr] = &*v.shape else {
+            panic!("invalid v shape: {:?}", v.shape);
+        };
+        assert_eq!(qr % kr, 0);
+        assert!(qr >= kr);
+        assert_eq!(kr, vr);
+        assert_eq!(kc, c);
+        assert_eq!(vc, c);
 
-            let ty = q.ty;
-            assert_eq!(k.ty, ty);
-            assert_eq!(v.ty, ty);
+        let ty = q.ty;
+        assert_eq!(k.ty, ty);
+        assert_eq!(v.ty, ty);
 
-            let r = qr + kr + vr;
-            let q = q.data;
-            let k = k.data;
-            let v = v.data;
-            map.insert(
-                format!("blk.{i}.attn_qkv.weight"),
-                Tensor {
-                    ty,
-                    shape: vec![r, c],
-                    data: DataPromise::lazy(move || {
-                        let q = q.get();
-                        let k = k.get();
-                        let v = v.get();
+        let r = qr + kr + vr;
+        let q = q.data;
+        let k = k.data;
+        let v = v.data;
+        map.insert(
+            format!("blk.{i}.attn_qkv.weight"),
+            Tensor {
+                ty,
+                shape: vec![c, r],
+                data: DataPromise::lazy(move || {
+                    let q = q.get();
+                    let k = k.get();
+                    let v = v.get();
 
-                        let len = q.len() + k.len() + v.len();
-                        assert_eq!(len, (r * c) as usize * ty.nbytes());
+                    let len = q.len() + k.len() + v.len();
+                    assert_eq!(len, (c * r) as usize * ty.nbytes());
 
-                        let mut dst = MmapMut::map_anon(len).unwrap();
-                        let (q_, tail) = dst.split_at_mut(q.len());
-                        let (k_, v_) = tail.split_at_mut(k.len());
-                        q_.copy_from_slice(q);
-                        k_.copy_from_slice(k);
-                        v_.copy_from_slice(v);
-                        dst
-                    }),
-                },
-            );
-        } else {
-            todo!()
-        }
+                    let mut dst = MmapMut::map_anon(len).unwrap();
+                    let (q_, tail) = dst.split_at_mut(q.len());
+                    let (k_, v_) = tail.split_at_mut(k.len());
+                    q_.copy_from_slice(q);
+                    k_.copy_from_slice(k);
+                    v_.copy_from_slice(v);
+                    dst
+                }),
+            },
+        );
     }
 }
 
 impl<'a> MergeCollector<'a, 2> {
-    fn new(blk: usize, transposed: bool) -> Self {
+    fn new(blk: usize) -> Self {
         Self {
             buf: (0..blk).map(|_| Blk([None, None])).collect(),
-            transposed,
         }
     }
 
@@ -218,144 +200,125 @@ impl<'a> MergeCollector<'a, 2> {
         let gate = gate_up.0[0].take().unwrap();
         let up = gate_up.0[1].take().unwrap();
 
-        if self.transposed {
-            let &[r, c] = &*gate.shape else {
-                panic!("invalid gate shape: {:?}", gate.shape);
-            };
-            let &[r_, c_] = &*up.shape else {
-                panic!("invalid up shape: {:?}", up.shape);
-            };
-            assert_eq!(r, r_);
-            assert_eq!(c, c_);
+        let &[c, r] = &*gate.shape else {
+            panic!("invalid gate shape: {:?}", gate.shape);
+        };
+        let &[c_, r_] = &*up.shape else {
+            panic!("invalid up shape: {:?}", up.shape);
+        };
+        assert_eq!(r, r_);
+        assert_eq!(c, c_);
 
-            let ty = gate.ty;
-            assert_eq!(up.ty, ty);
+        let ty = gate.ty;
+        assert_eq!(up.ty, ty);
 
-            let r = r * 2;
-            let gate = gate.data;
-            let up = up.data;
-            map.insert(
-                format!("blk.{i}.ffn_gate_up.weight"),
-                Tensor {
-                    ty,
-                    shape: vec![r, c],
-                    data: DataPromise::lazy(move || {
-                        let gate = gate.get();
-                        let up = up.get();
+        let r = r * 2;
+        let gate = gate.data;
+        let up = up.data;
+        map.insert(
+            format!("blk.{i}.ffn_gate_up.weight"),
+            Tensor {
+                ty,
+                shape: vec![c, r],
+                data: DataPromise::lazy(move || {
+                    let gate = gate.get();
+                    let up = up.get();
 
-                        let len = gate.len() + up.len();
-                        assert_eq!(len, (r * c) as usize * ty.nbytes());
+                    let len = gate.len() + up.len();
+                    assert_eq!(len, (c * r) as usize * ty.nbytes());
 
-                        let mut dst = MmapMut::map_anon(len).unwrap();
-                        let (gate_, up_) = dst.split_at_mut(gate.len());
-                        gate_.copy_from_slice(gate);
-                        up_.copy_from_slice(up);
-                        dst
-                    }),
-                },
-            );
-        } else {
-            todo!()
+                    let mut dst = MmapMut::map_anon(len).unwrap();
+                    let (gate_, up_) = dst.split_at_mut(gate.len());
+                    gate_.copy_from_slice(gate);
+                    up_.copy_from_slice(up);
+                    dst
+                }),
+            },
+        );
+    }
+}
+
+fn split_qkv<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
+    let &[c, r] = &*tensor.shape else {
+        panic!("invalid tensor shape: {:?}", tensor.shape);
+    };
+
+    let ty = tensor.ty;
+    let d = ty.nbytes();
+    let rq = c;
+    let rkv = (r - c) / 2;
+    let q = {
+        let data = tensor.data.clone();
+        Tensor {
+            ty,
+            shape: vec![c, rq],
+            data: DataPromise::lazy(move || {
+                let len = (c * rq) as usize * d;
+                copy_to_mmap(&data.get()[..len])
+            }),
         }
-    }
+    };
+    let k = {
+        let data = tensor.data.clone();
+        Tensor {
+            ty,
+            shape: vec![c, rkv],
+            data: DataPromise::lazy(move || {
+                let off = (c * rq) as usize * d;
+                let len = (c * rkv) as usize * d;
+                copy_to_mmap(&data.get()[off..][..len])
+            }),
+        }
+    };
+    let v = {
+        let data = tensor.data.clone();
+        Tensor {
+            ty,
+            shape: vec![c, rkv],
+            data: DataPromise::lazy(move || {
+                let off = (c * (rq + rkv)) as usize * d;
+                copy_to_mmap(&data.get()[off..])
+            }),
+        }
+    };
+    (q, k, v)
 }
 
-fn split_qkv<'a>(tensor: &Tensor<'a>, transposed: bool) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
-    let &[r, c] = &*tensor.shape else {
+fn split_gate_up<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>) {
+    let &[c, r] = &*tensor.shape else {
         panic!("invalid tensor shape: {:?}", tensor.shape);
     };
 
     let ty = tensor.ty;
     let d = ty.nbytes();
-    if transposed {
-        let q = {
-            let data = tensor.data.clone();
-            Tensor {
-                ty,
-                shape: vec![c, c],
-                data: DataPromise::lazy(move || {
-                    let len = (c * c) as usize * d;
-                    let data = &data.get()[..len];
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    dst.copy_from_slice(data);
-                    dst
-                }),
-            }
-        };
-        let k = {
-            let data = tensor.data.clone();
-            Tensor {
-                ty,
-                shape: vec![(r - c) / 2, c],
-                data: DataPromise::lazy(move || {
-                    let off = (c * c) as usize * d;
-                    let len = ((r - c) / 2 * c) as usize * d;
-                    let data = &data.get()[off..][..len];
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    dst.copy_from_slice(data);
-                    dst
-                }),
-            }
-        };
-        let v = {
-            let data = tensor.data.clone();
-            Tensor {
-                ty,
-                shape: vec![(r - c) / 2, c],
-                data: DataPromise::lazy(move || {
-                    let off = (c * c) as usize * d;
-                    let len = ((r - c) / 2 * c) as usize * d;
-                    let data = &data.get()[off + len..];
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    dst.copy_from_slice(data);
-                    dst
-                }),
-            }
-        };
-        (q, k, v)
-    } else {
-        todo!()
-    }
+    let r = r / 2;
+    let gate = {
+        let data = tensor.data.clone();
+        Tensor {
+            ty,
+            shape: vec![c, r],
+            data: DataPromise::lazy(move || {
+                let len = (c * r) as usize * d;
+                copy_to_mmap(&data.get()[..len])
+            }),
+        }
+    };
+    let up = {
+        let data = tensor.data.clone();
+        Tensor {
+            ty,
+            shape: vec![c, r],
+            data: DataPromise::lazy(move || {
+                let len = (c * r) as usize * d;
+                copy_to_mmap(&data.get()[len..])
+            }),
+        }
+    };
+    (gate, up)
 }
 
-fn split_gate_up<'a>(tensor: &Tensor<'a>, transposed: bool) -> (Tensor<'a>, Tensor<'a>) {
-    let &[r, c] = &*tensor.shape else {
-        panic!("invalid tensor shape: {:?}", tensor.shape);
-    };
-
-    let ty = tensor.ty;
-    let d = ty.nbytes();
-    if transposed {
-        let gate = {
-            let data = tensor.data.clone();
-            Tensor {
-                ty,
-                shape: vec![r / 2, c],
-                data: DataPromise::lazy(move || {
-                    let len = (r / 2 * c) as usize * d;
-                    let data = &data.get()[..len];
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    dst.copy_from_slice(data);
-                    dst
-                }),
-            }
-        };
-        let up = {
-            let data = tensor.data.clone();
-            Tensor {
-                ty,
-                shape: vec![r / 2, c],
-                data: DataPromise::lazy(move || {
-                    let len = (r / 2 * c) as usize * d;
-                    let data = &data.get()[len..];
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    dst.copy_from_slice(data);
-                    dst
-                }),
-            }
-        };
-        (gate, up)
-    } else {
-        todo!()
-    }
+fn copy_to_mmap(data: &[u8]) -> MmapMut {
+    let mut dst = MmapMut::map_anon(data.len()).unwrap();
+    dst.copy_from_slice(data);
+    dst
 }

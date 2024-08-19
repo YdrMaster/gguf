@@ -1,6 +1,5 @@
 ﻿mod cast;
 mod merge;
-mod transpose;
 
 use super::{compile_patterns, Content, DataPromise};
 use ggus::GGmlType;
@@ -10,7 +9,6 @@ pub(crate) enum Operator {
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
     Cast(GGmlType),
-    TransposeLinear(bool),
     MergeLinear(bool),
 }
 
@@ -33,7 +31,6 @@ impl Content<'_> {
             FilterMetaKey(r) => self.meta_kvs.retain(|k, _| r.is_match(k)),
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
             Cast(ty) => self.cast(ty),
-            TransposeLinear(ty) => self.transpose_linear(ty),
             MergeLinear(ty) => self.merge_linear(ty),
         }
     }
@@ -55,6 +52,3 @@ impl Content<'_> {
 
 const GENERAL_ARCHITECTURE: &str = "general.architecture";
 const LLAMA_BLOCK_COUNT: &str = "llama.block_count";
-const LLAMA_TENSOR_DATA_LAYOUT: &str = "llama.tensor_data_layout";
-const LAYOUT_TRANSPOSED: &str = "transposed";
-const LAYOUT_REFERENCE: &str = "reference";
