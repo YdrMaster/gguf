@@ -249,11 +249,11 @@ fn show_meta_kv(kv: GGufMetaKV, width: usize, detail: usize) -> Result<(), Faile
     let mut buf = String::new();
     match fmt_meta_val(&mut reader, ty, 1, detail, &mut buf) {
         Ok(()) => {
-            println!("{YES}{key:·<width$} {buf}");
+            println!("{YES}{key:·<width$}{:·>5}: {buf}", ty.name());
             Ok(())
         }
         Err(e) => {
-            println!("{ERR}{key:·<width$} {e:?}");
+            println!("{ERR}{key:·<width$}{:·>5}: {e:?}", ty.name());
             Err(Failed)
         }
     }

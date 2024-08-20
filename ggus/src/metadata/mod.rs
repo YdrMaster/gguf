@@ -45,6 +45,26 @@ pub enum GGufMetaDataValueType {
     F64 = 12,
 }
 
+impl GGufMetaDataValueType {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::U8 => "u8",
+            Self::I8 => "i8",
+            Self::U16 => "u16",
+            Self::I16 => "i16",
+            Self::U32 => "u32",
+            Self::I32 => "i32",
+            Self::F32 => "f32",
+            Self::Bool => "bool",
+            Self::String => "str",
+            Self::Array => "arr",
+            Self::I64 => "i64",
+            Self::F64 => "f64",
+            Self::U64 => "u64",
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
 pub enum GGufFileType {
