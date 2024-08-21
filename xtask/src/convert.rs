@@ -1,5 +1,6 @@
-﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig, Shards};
-use std::path::PathBuf;
+﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
+use ggus::GGufFileName;
+use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct ConvertArgs {
@@ -33,9 +34,13 @@ impl ConvertArgs {
             no_tensor_first,
         } = self;
 
-        let shards = Shards::from(&*file);
+        let dir = file.parent().unwrap();
+        let shards = GGufFileName::try_from(&*file)
+            .unwrap()
+            .iter_all()
+            .map(|name| dir.join(name.to_string()));
         let files = operate(
-            shards.iter_all(),
+            shards,
             ops.split("->").map(|op| {
                 let op = op.trim();
                 if let Some(content) = op.strip_prefix("filter-meta:") {
@@ -52,7 +57,9 @@ impl ConvertArgs {
             }),
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: format!("{}.convert", shards.name),
+                name: GGufFileName::try_from(&*file)
+                    .unwrap()
+                    .map_base_name(|s| Cow::Owned(format!("{s}-converted"))),
                 shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
                 shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
                 shard_no_tensor_first: no_tensor_first,

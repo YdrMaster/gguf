@@ -13,3 +13,4 @@ categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]
 indexmap.workspace = true
+fancy-regex = "0.13.0"

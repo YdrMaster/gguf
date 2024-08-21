@@ -2,11 +2,10 @@
 mod name_pattern;
 mod operator;
 mod read;
-mod shards;
 mod write;
 
 use file_info::FileInfo;
-use ggus::{GGmlType, GGufError, GGufMetaDataValueType, GGufReader};
+use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufReader};
 use indexmap::IndexMap;
 use memmap2::{Mmap, MmapMut};
 use read::read_files;
@@ -21,11 +20,10 @@ use std::{
 pub(crate) use file_info::{show_file_info, MemSize};
 pub(crate) use name_pattern::compile_patterns;
 pub(crate) use operator::Operator;
-pub(crate) use shards::Shards;
 
-pub(crate) struct OutputConfig {
+pub(crate) struct OutputConfig<'a> {
     pub dir: PathBuf,
-    pub name: String,
+    pub name: GGufFileName<'a>,
     pub shard_max_tensor_count: usize,
     pub shard_max_file_size: MemSize,
     pub shard_no_tensor_first: bool,

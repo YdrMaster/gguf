@@ -1,5 +1,7 @@
-﻿use crate::utils::{compile_patterns, Shards};
-use ggus::{GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufReadError, GGufReader};
+﻿use crate::utils::compile_patterns;
+use ggus::{
+    GGufFileHeader, GGufFileName, GGufMetaDataValueType, GGufMetaKV, GGufReadError, GGufReader,
+};
 use indexmap::IndexMap;
 use memmap2::Mmap;
 use regex::Regex;
@@ -52,7 +54,12 @@ impl ShowArgs {
         let filter_tensor = compile_patterns(&filter_tensor);
 
         let files = if shards {
-            Shards::from(&*file).iter_all().collect::<Vec<_>>()
+            let dir = file.parent().unwrap();
+            GGufFileName::try_from(&*file)
+                .unwrap()
+                .iter_all()
+                .map(|name| dir.join(name.to_string()))
+                .collect::<Vec<_>>()
         } else {
             vec![file]
         };

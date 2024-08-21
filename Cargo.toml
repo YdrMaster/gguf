@@ -3,4 +3,4 @@ members = ["ggus", "xtask"]
 resolver = "2"
 
 [workspace.dependencies]
-indexmap = "2.3"
+indexmap = "2.4"

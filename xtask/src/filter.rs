@@ -1,5 +1,6 @@
 ﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
-use std::path::PathBuf;
+use ggus::GGufFileName;
+use std::{borrow::Cow, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct FilterArgs {
@@ -19,21 +20,23 @@ pub struct FilterArgs {
 impl FilterArgs {
     pub fn filter(self) {
         let Self {
-            file: file_path,
+            file,
             output_dir,
             filter_meta,
             filter_tensor,
         } = self;
 
         let files = operate(
-            [&file_path],
+            [&file],
             [
                 Operator::filter_meta_key(filter_meta),
                 Operator::filter_tensor_name(filter_tensor),
             ],
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: file_path.file_stem().unwrap().to_str().unwrap().to_string() + ".part",
+                name: GGufFileName::try_from(&*file)
+                    .unwrap()
+                    .map_base_name(|s| Cow::Owned(format!("{s}-filtered"))),
                 shard_max_tensor_count: usize::MAX,
                 shard_max_file_size: Default::default(),
                 shard_no_tensor_first: false,

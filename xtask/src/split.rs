@@ -1,5 +1,6 @@
-﻿use crate::utils::{operate, show_file_info, OutputConfig, Shards};
-use std::path::PathBuf;
+﻿use crate::utils::{operate, show_file_info, OutputConfig};
+use ggus::GGufFileName;
+use std::{ops::Deref, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct SplitArgs {
@@ -29,8 +30,8 @@ impl SplitArgs {
             no_tensor_first,
         } = self;
 
-        let shards = Shards::from(&*file);
-        if shards.count > 1 {
+        let name: GGufFileName = file.deref().try_into().unwrap();
+        if name.shard_count() > 1 {
             println!("Model has already been splited");
             return;
         }
@@ -40,7 +41,7 @@ impl SplitArgs {
             [],
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: shards.name.into(),
+                name,
                 shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
                 shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
                 shard_no_tensor_first: no_tensor_first,

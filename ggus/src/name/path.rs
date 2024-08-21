@@ -1,51 +1,58 @@
-﻿use std::{
-    cmp::max,
-    path::{Path, PathBuf},
-};
+﻿use super::GGufFileName;
+use std::path::Path;
 
 #[derive(Clone)]
-pub(crate) struct Shards<'a> {
+pub struct GGufShardPath<'a> {
     pub dir: &'a Path,
-    pub name: &'a str,
-    pub index: usize,
-    pub count: usize,
-    pub format: usize,
+    pub name: GGufFileName<'a>,
 }
 
-impl<'a> From<&'a Path> for Shards<'a> {
-    fn from(file: &'a Path) -> Self {
-        let dir = file.parent().unwrap();
-        let name = file.file_name().unwrap().to_str().unwrap();
-        let Some((name, "gguf")) = name.rsplit_once('.') else {
-            panic!()
-        };
+#[derive(Clone, Debug)]
+pub enum GGufShardParseError {
+    InvalidPathFormat,
+    UnknownFileKind(String),
+}
+
+impl<'a> TryFrom<&'a Path> for GGufShardPath<'a> {
+    type Error = GGufShardParseError;
+
+    fn try_from(value: &'a Path) -> Result<Self, Self::Error> {
+        type E = GGufShardParseError;
+        let dir = value.parent().ok_or(E::InvalidPathFormat)?;
+        let name = value
+            .file_name()
+            .ok_or(E::InvalidPathFormat)?
+            .to_str()
+            .ok_or(E::InvalidPathFormat)?
+            .strip_suffix(".gguf")
+            .ok_or(E::InvalidPathFormat)?;
         match &*name.rsplitn(4, '-').collect::<Vec<_>>() {
-            [count_, "of", index_, name] => {
+            &[count_, "of", index_, name] => {
                 if let Ok(index) = index_.parse() {
                     if let Ok(count) = count_.parse() {
-                        return Self {
+                        return Ok(Self {
                             dir,
-                            name,
+                            name: GGufFileName::new(name)?,
                             index,
                             count,
                             format: max(index_.len(), count_.len()),
-                        };
+                        });
                     }
                 };
             }
             [..] => {}
         }
-        Self {
+        Ok(Self {
             dir,
-            name,
+            name: GGufFileName::new(name)?,
             index: 0,
             count: 1,
             format: 5,
-        }
+        })
     }
 }
 
-impl Shards<'_> {
+impl GGufShardPath<'_> {
     #[inline]
     pub fn to_single(&self) -> PathBuf {
         self.dir.join(format!("{}.gguf", self.name))
@@ -60,7 +67,7 @@ impl Shards<'_> {
     }
 }
 
-impl Iterator for Shards<'_> {
+impl Iterator for GGufShardPath<'_> {
     type Item = PathBuf;
 
     fn next(&mut self) -> Option<Self::Item> {

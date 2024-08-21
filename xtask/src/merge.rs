@@ -1,5 +1,6 @@
-﻿use crate::utils::{operate, show_file_info, OutputConfig, Shards};
-use std::path::PathBuf;
+﻿use crate::utils::{operate, show_file_info, OutputConfig};
+use ggus::GGufFileName;
+use std::{ops::Deref, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
@@ -14,18 +15,21 @@ impl MergeArgs {
     pub fn merge(self) {
         let Self { file, output_dir } = self;
 
-        let shards = Shards::from(&*file);
-        if shards.count < 2 {
+        let dir = file.parent().unwrap();
+        let name: GGufFileName = file.deref().try_into().unwrap();
+        if name.shard_count() == 1 {
             println!("Model does not need to merge.");
             return;
         }
 
         let files = operate(
-            shards.iter_all(),
+            name.clone()
+                .iter_all()
+                .map(|name| dir.join(name.to_string())),
             [],
             OutputConfig {
                 dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: shards.name.into(),
+                name,
                 shard_max_tensor_count: usize::MAX,
                 shard_max_file_size: Default::default(),
                 shard_no_tensor_first: false,

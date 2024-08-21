@@ -6,12 +6,10 @@ authors = ["YdrMaster <ydrml@hotmail.com>"]
 
 [dependencies]
 ggus = { version = "*", path = "../ggus" }
-
+indexmap.workspace = true
+itertools = "0.13.0"
 memmap2 = "0.9"
 regex = "1.10"
-indexmap.workspace = true
-clap = { version = "4.5", features = ["derive"] }
-itertools = "0.13.0"
-
 rayon = "1.10"
 half = "2.4"
+clap = { version = "4.5", features = ["derive"] }

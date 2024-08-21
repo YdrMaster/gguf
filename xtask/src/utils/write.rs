@@ -1,4 +1,4 @@
-﻿use super::{Content, FileInfo, OutputConfig, Shards};
+﻿use super::{Content, FileInfo, OutputConfig};
 use ggus::{GGufFileHeader, GGufFileSimulator, GGufFileWriter};
 use std::{fs::File, io, iter::zip, thread};
 
@@ -52,19 +52,15 @@ impl Content<'_> {
         // 生成迭代器
 
         let meta_kvs = &meta_kvs;
-        let names = Shards {
-            dir: &dir,
-            name: &name,
-            index: 0,
-            count: shards.len(),
-            format: 5,
-        };
+        let path = name
+            .split_n(shards.len())
+            .map(|name| dir.join(name.to_string()));
 
         // 并行写入文件
 
         std::fs::create_dir_all(&dir)?;
         thread::scope(|s| {
-            zip(shards, names)
+            zip(shards, path)
                 .enumerate()
                 .map(|(i, (tensors, path))| {
                     s.spawn(move || -> Result<FileInfo, io::Error> {
