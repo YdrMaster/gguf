@@ -14,7 +14,7 @@ pub use header::GGufFileHeader;
 pub use metadata::{
     GGufFileType, GGufMetaDataValueType, GGufMetaKV, DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT,
 };
-pub use name::GGufFileName;
+pub use name::{GGufFileName, GGufShardParseError};
 pub use read::{GGufReadError, GGufReader};
 pub use tensor::{GGmlType, GGufTensorInfo, GGufTensorMeta};
 pub use write::{

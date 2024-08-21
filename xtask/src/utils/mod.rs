@@ -8,7 +8,6 @@ use file_info::FileInfo;
 use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufReader};
 use indexmap::IndexMap;
 use memmap2::{Mmap, MmapMut};
-use read::read_files;
 use std::{
     borrow::Cow,
     fs::File,
@@ -47,8 +46,7 @@ pub(crate) fn operate<T: AsRef<Path>>(
         .collect::<Result<Vec<_>, _>>()
         .map_err(OperateError::Io)?;
 
-    let files = read_files(files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
-    let mut content = Content::new(&files);
+    let mut content = Content::new(files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
     for op in operations {
         content.apply(op);
     }
@@ -57,8 +55,8 @@ pub(crate) fn operate<T: AsRef<Path>>(
 
 struct Content<'a> {
     alignment: usize,
-    meta_kvs: IndexMap<String, MetaValue<'a>>,
-    tensors: IndexMap<String, Tensor<'a>>,
+    meta_kvs: IndexMap<Cow<'a, str>, MetaValue<'a>>,
+    tensors: IndexMap<Cow<'a, str>, Tensor<'a>>,
 }
 
 struct MetaValue<'a> {

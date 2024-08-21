@@ -1,57 +1,59 @@
 ﻿use super::{Content, DataPromise, MetaValue, Tensor};
 use ggus::{GGuf, GGufError, GENERAL_ALIGNMENT};
-use std::borrow::Cow;
 
 impl<'a> Content<'a> {
-    pub fn new(files: &[GGuf<'a>]) -> Self {
-        let mut ans = Self {
-            alignment: 0,
-            meta_kvs: Default::default(),
-            tensors: Default::default(),
-        };
+    pub fn new(files: impl IntoIterator<Item = &'a [u8]> + 'a) -> Result<Self, GGufError> {
+        std::thread::scope(|s| {
+            let mut ans = Self {
+                alignment: 0,
+                meta_kvs: Default::default(),
+                tensors: Default::default(),
+            };
 
-        for f in files {
-            ans.alignment = ans.alignment.max(f.alignment);
-
-            for (&k, kv) in &f.meta_kvs {
-                if k != GENERAL_ALIGNMENT && !k.starts_with("split.") {
-                    ans.meta_kvs.insert(
-                        k.into(),
-                        MetaValue {
-                            ty: kv.ty(),
-                            value: Cow::Borrowed(kv.value_bytes()),
-                        },
-                    );
-                }
+            for thread in files
+                .into_iter()
+                .map(|data| s.spawn(|| GGuf::new(data)))
+                .collect::<Vec<_>>()
+                .into_iter()
+            {
+                thread
+                    .join()
+                    .unwrap()
+                    .and_then(|gguf| ans.merge_file(gguf))?;
             }
 
-            for (&name, tensor) in &f.tensors {
-                let tensor = tensor.to_info();
-                ans.tensors.insert(
-                    name.into(),
-                    Tensor {
-                        ty: tensor.ty(),
-                        shape: tensor.shape().to_vec(),
-                        data: DataPromise::Borrowed(&f.data[tensor.offset()..][..tensor.nbytes()]),
-                    },
-                );
+            Ok(ans)
+        })
+    }
+
+    fn merge_file(&mut self, others: GGuf<'a>) -> Result<(), GGufError> {
+        self.alignment = self.alignment.max(others.alignment);
+
+        for (k, kv) in others.meta_kvs {
+            if k == GENERAL_ALIGNMENT || k.starts_with("split.") {
+                continue;
+            }
+            let value = MetaValue {
+                ty: kv.ty(),
+                value: kv.value_bytes().into(),
+            };
+            if self.meta_kvs.insert(k.into(), value).is_some() {
+                return Err(GGufError::DuplicateMetaKey(k.into()));
             }
         }
 
-        ans
-    }
-}
+        for (name, tensor) in others.tensors {
+            let tensor = tensor.to_info();
+            let tensor = Tensor {
+                ty: tensor.ty(),
+                shape: tensor.shape().to_vec(),
+                data: DataPromise::Borrowed(&others.data[tensor.offset()..][..tensor.nbytes()]),
+            };
+            if self.tensors.insert(name.into(), tensor).is_some() {
+                return Err(GGufError::DuplicateTensorName(name.into()));
+            }
+        }
 
-pub(super) fn read_files<'a>(
-    files: impl IntoIterator<Item = &'a [u8]> + 'a,
-) -> Result<Vec<GGuf<'a>>, GGufError> {
-    std::thread::scope(|s| {
-        files
-            .into_iter()
-            .map(|data| s.spawn(|| GGuf::new(data)))
-            .collect::<Vec<_>>()
-            .into_iter()
-            .map(|t| t.join().unwrap())
-            .collect::<Result<Vec<_>, _>>()
-    })
+        Ok(())
+    }
 }

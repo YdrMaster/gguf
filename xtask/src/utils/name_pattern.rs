@@ -1,5 +1,5 @@
 ﻿use regex::Regex;
-use std::{borrow::Cow, fmt, sync::OnceLock};
+use std::{fmt, sync::OnceLock};
 
 #[inline]
 pub(crate) fn compile_patterns(patterns: &str) -> Regex {
@@ -33,9 +33,9 @@ impl fmt::Display for Pattern<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut iter = self.0.split('.').map(|s| {
             if s.is_empty() {
-                Cow::Borrowed(r"\w+")
+                r"\w+".into()
             } else if s.chars().all(|c| c == '*') {
-                Cow::Borrowed(r"(\w+\.)*\w+")
+                r"(\w+\.)*\w+".into()
             } else {
                 static REGEX: OnceLock<Regex> = OnceLock::new();
                 // 消除任何连续 *

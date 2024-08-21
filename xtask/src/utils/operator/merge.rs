@@ -3,7 +3,7 @@ use ggus::DataFuture;
 use indexmap::IndexMap;
 use memmap2::MmapMut;
 use regex::Regex;
-use std::sync::LazyLock;
+use std::{borrow::Cow, sync::LazyLock};
 
 impl Operator {
     pub fn merge_linear(m: impl AsRef<str>) -> Self {
@@ -72,16 +72,20 @@ impl Content<'_> {
                 "attn_qkv" => {
                     let i: usize = captures[1].parse().unwrap();
                     let (q, k, v) = split_qkv(&tensor);
-                    self.tensors.insert(format!("blk.{i}.attn_q.weight"), q);
-                    self.tensors.insert(format!("blk.{i}.attn_k.weight"), k);
-                    self.tensors.insert(format!("blk.{i}.attn_v.weight"), v);
+                    self.tensors
+                        .insert(format!("blk.{i}.attn_q.weight").into(), q);
+                    self.tensors
+                        .insert(format!("blk.{i}.attn_k.weight").into(), k);
+                    self.tensors
+                        .insert(format!("blk.{i}.attn_v.weight").into(), v);
                 }
                 "ffn_gate_up" => {
                     let i: usize = captures[1].parse().unwrap();
                     let (gate, up) = split_gate_up(&tensor);
                     self.tensors
-                        .insert(format!("blk.{i}.ffn_gate.weight"), gate);
-                    self.tensors.insert(format!("blk.{i}.ffn_up.weight"), up);
+                        .insert(format!("blk.{i}.ffn_gate.weight").into(), gate);
+                    self.tensors
+                        .insert(format!("blk.{i}.ffn_up.weight").into(), up);
                 }
                 _ => {
                     self.tensors.insert(name, tensor);
@@ -109,7 +113,7 @@ impl<'a> MergeCollector<'a, 3> {
 
     fn put(
         &mut self,
-        map: &mut IndexMap<String, Tensor<'a>>,
+        map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
         i: impl AsRef<str>,
         tensor: Tensor<'a>,
         n: usize,
@@ -150,7 +154,7 @@ impl<'a> MergeCollector<'a, 3> {
         let k = k.data;
         let v = v.data;
         map.insert(
-            format!("blk.{i}.attn_qkv.weight"),
+            format!("blk.{i}.attn_qkv.weight").into(),
             Tensor {
                 ty,
                 shape: vec![c, r],
@@ -184,7 +188,7 @@ impl<'a> MergeCollector<'a, 2> {
 
     fn put(
         &mut self,
-        map: &mut IndexMap<String, Tensor<'a>>,
+        map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
         i: impl AsRef<str>,
         tensor: Tensor<'a>,
         n: usize,
@@ -216,7 +220,7 @@ impl<'a> MergeCollector<'a, 2> {
         let gate = gate.data;
         let up = up.data;
         map.insert(
-            format!("blk.{i}.ffn_gate_up.weight"),
+            format!("blk.{i}.ffn_gate_up.weight").into(),
             Tensor {
                 ty,
                 shape: vec![c, r],

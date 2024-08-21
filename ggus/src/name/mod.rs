@@ -34,7 +34,7 @@ impl<'a> TryFrom<&'a str> for GGufFileName<'a> {
 
         let captures = REGEX.captures(value).unwrap().unwrap();
         Ok(Self {
-            base_name: Cow::Borrowed(captures.name("BaseName").unwrap().as_str()),
+            base_name: captures.name("BaseName").unwrap().as_str().into(),
             size_label: captures
                 .name("SizeLabel")
                 .map(|m| m.as_str().parse().unwrap()),
