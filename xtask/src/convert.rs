@@ -40,6 +40,7 @@ impl ConvertArgs {
             .iter_all()
             .map(|name| dir.join(name.to_string()));
         let files = operate(
+            GGufFileName::try_from(&*file).unwrap(),
             shards,
             ops.split("->").map(|op| {
                 let op = op.trim();
@@ -56,10 +57,7 @@ impl ConvertArgs {
                 }
             }),
             OutputConfig {
-                dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: GGufFileName::try_from(&*file)
-                    .unwrap()
-                    .map_base_name(|s| format!("{s}-converted").into()),
+                dir: output_dir,
                 shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
                 shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
                 shard_no_tensor_first: no_tensor_first,

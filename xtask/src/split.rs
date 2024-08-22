@@ -37,11 +37,11 @@ impl SplitArgs {
         }
 
         let files = operate(
+            name,
             [&file],
             [],
             OutputConfig {
-                dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name,
+                dir: output_dir,
                 shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
                 shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
                 shard_no_tensor_first: no_tensor_first,

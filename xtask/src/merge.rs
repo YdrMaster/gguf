@@ -23,13 +23,11 @@ impl MergeArgs {
         }
 
         let files = operate(
-            name.clone()
-                .iter_all()
-                .map(|name| dir.join(name.to_string())),
+            name.clone(),
+            name.iter_all().map(|name| dir.join(name.to_string())),
             [],
             OutputConfig {
-                dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name,
+                dir: output_dir,
                 shard_max_tensor_count: usize::MAX,
                 shard_max_file_size: Default::default(),
                 shard_no_tensor_first: false,

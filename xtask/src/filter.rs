@@ -27,16 +27,14 @@ impl FilterArgs {
         } = self;
 
         let files = operate(
+            GGufFileName::try_from(&*file).unwrap(),
             [&file],
             [
                 Operator::filter_meta_key(filter_meta),
                 Operator::filter_tensor_name(filter_tensor),
             ],
             OutputConfig {
-                dir: output_dir.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                name: GGufFileName::try_from(&*file)
-                    .unwrap()
-                    .map_base_name(|s| format!("{s}-filtered").into()),
+                dir: output_dir,
                 shard_max_tensor_count: usize::MAX,
                 shard_max_file_size: Default::default(),
                 shard_no_tensor_first: false,

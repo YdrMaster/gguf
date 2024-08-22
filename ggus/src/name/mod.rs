@@ -12,13 +12,13 @@ use version::Version;
 
 #[derive(Clone, Debug)]
 pub struct GGufFileName<'a> {
-    base_name: Cow<'a, str>,
-    size_label: Option<SizeLabel>,
-    fine_tune: Option<&'a str>,
-    version: Option<Version>,
-    encoding: Option<&'a str>,
-    type_: Type,
-    shard: Shard,
+    pub base_name: Cow<'a, str>,
+    pub size_label: Option<SizeLabel>,
+    pub fine_tune: Option<Cow<'a, str>>,
+    pub version: Option<Version>,
+    pub encoding: Option<Cow<'a, str>>,
+    pub type_: Type,
+    pub shard: Shard,
 }
 
 #[derive(Debug)]
@@ -38,11 +38,11 @@ impl<'a> TryFrom<&'a str> for GGufFileName<'a> {
             size_label: captures
                 .name("SizeLabel")
                 .map(|m| m.as_str().parse().unwrap()),
-            fine_tune: captures.name("FineTune").map(|m| m.as_str()),
+            fine_tune: captures.name("FineTune").map(|m| m.as_str().into()),
             version: captures
                 .name("Version")
                 .map(|m| m.as_str().parse().unwrap()),
-            encoding: captures.name("Encoding").map(|m| m.as_str()),
+            encoding: captures.name("Encoding").map(|m| m.as_str().into()),
             type_: captures
                 .name("Type")
                 .map_or(Type::Default, |m| m.as_str().parse().unwrap()),
@@ -65,14 +65,6 @@ impl<'a> GGufFileName<'a> {
     #[inline]
     pub fn shard_count(&self) -> usize {
         self.shard.count.get() as _
-    }
-
-    #[inline]
-    pub fn map_base_name(self, f: impl FnOnce(&str) -> Cow<'a, str>) -> Self {
-        Self {
-            base_name: f(&self.base_name),
-            ..self
-        }
     }
 
     #[inline]

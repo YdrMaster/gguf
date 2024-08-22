@@ -23,6 +23,7 @@ impl Content<'_> {
     pub(super) fn cast(&mut self, ty: GGmlType) {
         self.assert_llama();
 
+        self.name.encoding = Some(format!("{ty:?}").into());
         for (name, tensor) in self.tensors.as_mut_slice() {
             if !name.ends_with("_norm.weight") && tensor.ty != ty {
                 let from = tensor.ty;

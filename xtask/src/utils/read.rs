@@ -1,10 +1,14 @@
 ﻿use super::{Content, DataPromise, MetaValue, Tensor};
-use ggus::{GGuf, GGufError, GENERAL_ALIGNMENT};
+use ggus::{GGuf, GGufError, GGufFileName, GENERAL_ALIGNMENT};
 
 impl<'a> Content<'a> {
-    pub fn new(files: impl IntoIterator<Item = &'a [u8]> + 'a) -> Result<Self, GGufError> {
+    pub fn new(
+        name: GGufFileName<'a>,
+        files: impl IntoIterator<Item = &'a [u8]> + 'a,
+    ) -> Result<Self, GGufError> {
         std::thread::scope(|s| {
             let mut ans = Self {
+                name,
                 alignment: 0,
                 meta_kvs: Default::default(),
                 tensors: Default::default(),

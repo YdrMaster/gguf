@@ -20,9 +20,8 @@ pub(crate) use file_info::{show_file_info, MemSize};
 pub(crate) use name_pattern::compile_patterns;
 pub(crate) use operator::Operator;
 
-pub(crate) struct OutputConfig<'a> {
-    pub dir: PathBuf,
-    pub name: GGufFileName<'a>,
+pub(crate) struct OutputConfig {
+    pub dir: Option<PathBuf>,
     pub shard_max_tensor_count: usize,
     pub shard_max_file_size: MemSize,
     pub shard_no_tensor_first: bool,
@@ -36,6 +35,7 @@ pub(crate) enum OperateError {
 }
 
 pub(crate) fn operate<T: AsRef<Path>>(
+    name: GGufFileName,
     input_files: impl IntoIterator<Item = T>,
     operations: impl IntoIterator<Item = Operator>,
     out: OutputConfig,
@@ -46,7 +46,7 @@ pub(crate) fn operate<T: AsRef<Path>>(
         .collect::<Result<Vec<_>, _>>()
         .map_err(OperateError::Io)?;
 
-    let mut content = Content::new(files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
+    let mut content = Content::new(name, files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
     for op in operations {
         content.apply(op);
     }
@@ -54,6 +54,7 @@ pub(crate) fn operate<T: AsRef<Path>>(
 }
 
 struct Content<'a> {
+    name: GGufFileName<'a>,
     alignment: usize,
     meta_kvs: IndexMap<Cow<'a, str>, MetaValue<'a>>,
     tensors: IndexMap<Cow<'a, str>, Tensor<'a>>,
