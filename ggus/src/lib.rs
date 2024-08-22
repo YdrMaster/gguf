@@ -12,7 +12,8 @@ mod write;
 pub use file::{GGuf, GGufError};
 pub use header::GGufFileHeader;
 pub use metadata::{
-    GGufFileType, GGufMetaDataValueType, GGufMetaKV, DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT,
+    GGmlTokenType, GGufFileType, GGufMetaDataValueType, GGufMetaKV, DEFAULT_ALIGNMENT,
+    GENERAL_ALIGNMENT,
 };
 pub use name::{GGufFileName, GGufShardParseError};
 pub use read::{GGufReadError, GGufReader};
