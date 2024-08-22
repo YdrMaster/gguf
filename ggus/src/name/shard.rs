@@ -20,7 +20,7 @@ impl FromStr for Shard {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        const PATTERN: &str = r"^\d{5}-of-\d{5}$";
+        const PATTERN: &str = r"^(\d{5})-of-(\d{5})$";
         static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(PATTERN).unwrap());
 
         let captures = REGEX.captures(s).unwrap().unwrap();

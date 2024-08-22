@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 #[derive(Args, Default)]
 pub struct ConvertArgs {
-    /// File to split
+    /// File to convert
     file: PathBuf,
-    /// Output directory for splited shards
+    /// Output directory for converted files
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
     /// Operations to apply, separated by "->"
@@ -34,14 +34,13 @@ impl ConvertArgs {
             no_tensor_first,
         } = self;
 
+        let name = GGufFileName::try_from(&*file).unwrap();
         let dir = file.parent().unwrap();
-        let shards = GGufFileName::try_from(&*file)
-            .unwrap()
-            .iter_all()
-            .map(|name| dir.join(name.to_string()));
         let files = operate(
-            GGufFileName::try_from(&*file).unwrap(),
-            shards,
+            name.clone(),
+            name.clone()
+                .iter_all()
+                .map(|name| dir.join(name.to_string())),
             ops.split("->").map(|op| {
                 let op = op.trim();
                 if let Some(content) = op.strip_prefix("filter-meta:") {

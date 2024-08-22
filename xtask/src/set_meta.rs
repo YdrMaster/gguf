@@ -1,38 +1,32 @@
 ﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
 use ggus::GGufFileName;
-use std::path::PathBuf;
+use std::{fs::read_to_string, path::PathBuf};
 
 #[derive(Args, Default)]
-pub struct FilterArgs {
-    /// The file to filter
+pub struct SetMetaArgs {
+    /// File to set metadata
     file: PathBuf,
-    /// Output directory for filtered file
+    /// Meta data to set for the file
+    meta_kvs: PathBuf,
+    /// Output directory for changed file
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
-    /// Meta to keep
-    #[clap(long, short = 'm', default_value = "*")]
-    filter_meta: String,
-    /// Tensors to keep
-    #[clap(long, short = 't', default_value = "*")]
-    filter_tensor: String,
 }
 
-impl FilterArgs {
-    pub fn filter(self) {
+impl SetMetaArgs {
+    pub fn set_meta(self) {
         let Self {
             file,
+            meta_kvs,
             output_dir,
-            filter_meta,
-            filter_tensor,
         } = self;
+
+        let cfg = read_to_string(meta_kvs).unwrap();
 
         let files = operate(
             GGufFileName::try_from(&*file).unwrap(),
             [&file],
-            [
-                Operator::filter_meta_key(filter_meta),
-                Operator::filter_tensor_name(filter_tensor),
-            ],
+            [Operator::set_meta_by_cfg(cfg)],
             OutputConfig {
                 dir: output_dir,
                 shard_max_tensor_count: usize::MAX,

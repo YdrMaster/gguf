@@ -4,7 +4,7 @@ use std::{ops::Deref, path::PathBuf};
 
 #[derive(Args, Default)]
 pub struct MergeArgs {
-    /// One of the shards to merge.
+    /// One of the shards to merge
     file: PathBuf,
     /// Output directory for merged file
     #[clap(long, short)]

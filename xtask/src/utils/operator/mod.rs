@@ -1,15 +1,18 @@
 ﻿mod cast;
 mod merge;
+mod set_meta;
 
 use super::{compile_patterns, Content, DataPromise};
-use ggus::GGmlType;
+use ggus::{GGmlType, GGufMetaDataValueType};
 use regex::Regex;
+use std::collections::HashMap;
 
 pub(crate) enum Operator {
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
     Cast(GGmlType),
     MergeLinear(bool),
+    SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
 }
 
 impl Operator {
@@ -32,6 +35,7 @@ impl Content<'_> {
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
             Cast(ty) => self.cast(ty),
             MergeLinear(ty) => self.merge_linear(ty),
+            SetMeta(map) => self.set_meta(map),
         }
     }
 
