@@ -1,23 +1,20 @@
 ﻿use super::{super::MetaValue, Content, Operator};
 use ggus::{GGufMetaDataValueType as Ty, GGufWriter, GENERAL_ALIGNMENT};
+use internal::StrCollector;
 use regex::Regex;
 use std::{collections::HashMap, fmt::Debug, str::FromStr, sync::LazyLock};
 
 impl Operator {
     #[inline]
-    pub fn set_meta_by_cfg(cfg: String) -> Self {
+    pub fn set_meta_by_cfg(cfg: &str) -> Self {
         let mut ans = HashMap::new();
 
         let mut state = None;
         for line in cfg.lines() {
             state = State::transfer(state, line, &mut ans);
         }
-        match state {
-            Some(State::StrPedding(_)) => panic!("Empty multi-line string"),
-            Some(State::StrAppending(collector)) => {
-                ans.insert(collector.key, write_val(Ty::String, collector.val));
-            }
-            None => {}
+        if let Some(State::StrPedding(str) | State::StrAppending(str)) = state {
+            str.save_to(&mut ans)
         }
 
         Self::SetMeta(ans)
@@ -28,10 +25,9 @@ impl Content<'_> {
     pub fn set_meta(&mut self, mut map: HashMap<String, (Ty, Vec<u8>)>) {
         for (k, v) in &mut self.meta_kvs {
             if let Some((ty, vec)) = map.remove(&**k) {
-                *v = MetaValue {
-                    ty,
-                    value: vec.into(),
-                }
+                // 禁止修改元信息类型
+                assert_eq!(v.ty, ty);
+                v.value = vec.into();
             }
         }
         for (k, (ty, vec)) in map {
@@ -70,81 +66,125 @@ impl State {
     ) -> Option<Self> {
         match current {
             None => {
+                // 空行维持当前状态
+                if line.is_empty() {
+                    return None;
+                }
+
                 macro_rules! regex {
                     ($name:ident $pattern:expr) => {
                         static $name: LazyLock<Regex> =
                             LazyLock::new(|| Regex::new($pattern).unwrap());
                     };
                 }
+                regex!(KV_REGEX  r"^`(?<Key>(\w+\.)*\w+)`\s*(?<Type>\S+)");
+                regex!(ARR_REGEX r"^\[(\w+)\](\S+)?$");
 
-                regex!(REGEX      r"^`(?<Key>(\w+\.)*\w+)`\s*(?<Type>\S+)");
-                regex!(STR_REGEX  r"^str(\S+)?$");
-                regex!(ARR_REGEX  r"^\[(\w+)\](\S+)?$");
-
-                let Some(matches) = REGEX.captures(line) else {
-                    return None;
-                };
-
+                // 匹配元信息配置项
+                let matches = KV_REGEX.captures(line).expect("Expect meta kv config item");
                 let key = matches.name("Key").unwrap().as_str().to_string();
                 let ty = matches.name("Type").unwrap();
                 let val = line[ty.end()..].trim();
                 let ty = ty.as_str();
 
-                if let Some(str) = STR_REGEX.captures(ty) {
-                    let sep = &str[1];
+                if let Some(sep) = ty.strip_prefix("str") {
+                    // 配置字符串
                     if sep.is_empty() {
+                        // 无分隔符，必须为单行字符串，以双引号包围
                         let val = val.strip_prefix('"').unwrap().strip_suffix('"').unwrap();
                         map.insert(key, write_val(Ty::String, val));
                         None
                     } else {
+                        // 有分隔符，必须为多行字符串，内容为空
                         assert!(val.is_empty());
-                        Some(State::StrPedding(StrCollector {
-                            key,
-                            sep: format!("{sep} "),
-                            val: String::new(),
-                        }))
+                        // 状态转移到字符串预备
+                        Some(State::StrPedding(StrCollector::new(key, sep)))
                     }
                 } else if let Some(arr) = ARR_REGEX.captures(ty) {
+                    // TODO: 配置数组类型
                     todo!("arr: {}", &arr[0])
                 } else {
-                    map.insert(key.into(), write_val(parse_ty(ty), val));
+                    // 配置代数类型
+                    map.insert(key, write_val(parse_ty(ty), val));
                     None
                 }
             }
-            Some(Self::StrPedding(collector)) => {
+            Some(Self::StrPedding(mut str)) => {
+                // 字符串预备状态
                 if line.is_empty() {
-                    Some(Self::StrPedding(collector))
+                    // 空行维持当前状态
+                    Some(Self::StrPedding(str))
+                } else if str.append(line) {
+                    // 开始拼接多行字符串
+                    Some(Self::StrAppending(str))
                 } else {
-                    Some(Self::StrAppending(collector.append(line)))
+                    // 字符串结束，写入元信息并重用当前行
+                    str.save_to(map);
+                    Self::transfer(None, line, map)
                 }
             }
-            Some(Self::StrAppending(collector)) => {
+            Some(Self::StrAppending(mut str)) => {
                 if line.is_empty() {
-                    map.insert(collector.key, write_val(Ty::String, collector.val));
+                    // 空行，字符串结束，写入元信息
+                    str.save_to(map);
                     None
+                } else if str.append(line) {
+                    // 继续拼接多行字符串
+                    Some(Self::StrAppending(str))
                 } else {
-                    Some(Self::StrAppending(collector.append(line)))
+                    // 字符串结束，写入元信息并重用当前行
+                    str.save_to(map);
+                    Self::transfer(None, line, map)
                 }
             }
         }
     }
 }
 
-#[derive(Debug)]
-struct StrCollector {
-    key: String,
-    sep: String,
-    val: String,
-}
+mod internal {
+    use std::collections::HashMap;
 
-impl StrCollector {
-    pub fn append(mut self, line: &str) -> Self {
-        let val = line
-            .strip_prefix(&self.sep)
-            .unwrap_or_else(|| panic!("Line must start with {}", self.sep));
-        self.val.push('\n');
-        self.val.push_str(val);
-        self
+    use super::{write_val, Ty};
+
+    #[derive(Debug)]
+    pub(super) struct StrCollector {
+        key: String,
+        sep: String,
+        val: Option<String>,
+    }
+
+    impl StrCollector {
+        #[inline]
+        pub fn new(key: String, sep: &str) -> Self {
+            Self {
+                key,
+                sep: format!("{sep} "),
+                val: None,
+            }
+        }
+
+        #[inline]
+        pub fn append(&mut self, line: &str) -> bool {
+            if let Some(line) = line.strip_prefix(&self.sep) {
+                if let Some(val) = self.val.as_mut() {
+                    val.push('\n');
+                    val.push_str(line);
+                } else {
+                    self.val = Some(line.to_string());
+                }
+                true
+            } else {
+                false
+            }
+        }
+
+        #[inline]
+        pub fn save_to(self, map: &mut HashMap<String, (Ty, Vec<u8>)>) {
+            map.insert(
+                self.key,
+                write_val(Ty::String, self.val.unwrap_or_default()),
+            );
+        }
     }
 }
 

@@ -10,7 +10,7 @@
 ![GitHub contributors](https://img.shields.io/github/contributors/YdrMaster/gguf)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/YdrMaster/gguf)
 
-## [ggus 库](/ggus)
+> [ggus 库](/ggus)
 
 ## gguf 实用工具
 
@@ -165,6 +165,42 @@ Options:
 ```
 
 `<META_KVS>` 是具有类似如下格式的文本文件：
+
+1. 配置代数类型元信息
+
+   > 代数类型包括整型、无符号整型、浮点型和布尔。
+
+   ```plaintext
+   `<KEY>`<Ty> <VAL>
+   ```
+
+2. 配置字符串元信息
+
+   单行字符串：
+
+   ```plaintext
+   `<KEY>`str "<VAL>"
+   ```
+
+   多行字符串：
+
+   ```plaintext
+   `<KEY>`str<Sep>
+   <Sep> [Content]
+   <Sep> [Content]
+   <Sep> [Content]
+
+   ```
+
+   其中 `Sep` 是表示字符串继续的分隔符。必须紧邻 `str`，之间不能包含空白字符，且分隔符中也不能包含空白字符。
+   连续的多行字符串，每行必须以分隔符+空格起始，此行后续所有字符（包括换行符）都被视作多行字符串的内容，不转义。
+   任何不以分隔符开始的行（包括空行）都将结束多行字符串。
+
+3. 配置数组元信息
+
+   TODO: 当前此功能未实现。
+
+这是一个配置元信息的示例文件内容：
 
 ```plaintext
 `general.alignment` u32 128

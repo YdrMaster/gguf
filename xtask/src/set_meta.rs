@@ -22,6 +22,12 @@ impl SetMetaArgs {
         } = self;
 
         let cfg = read_to_string(meta_kvs).unwrap();
+        // 消除 utf-8 BOM
+        let cfg = if cfg.as_bytes()[..3] == [0xef, 0xbb, 0xbf] {
+            &cfg[3..]
+        } else {
+            &cfg[..]
+        };
 
         let files = operate(
             GGufFileName::try_from(&*file).unwrap(),
