@@ -70,8 +70,9 @@ impl<'a> GGufMetaKV<'a> {
         unsafe { reader.read_str_unchecked() }
     }
 
+    #[inline]
     pub fn ty(&self) -> Ty {
-        self.reader().skip_str().unwrap().read::<Ty>().unwrap()
+        self.reader().skip_str().unwrap().read().unwrap()
     }
 
     pub fn value_bytes(&self) -> &'a [u8] {

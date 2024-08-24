@@ -3,7 +3,7 @@ mod merge;
 mod set_meta;
 
 use super::{compile_patterns, Content, DataPromise};
-use ggus::{GGmlType, GGufMetaDataValueType};
+use ggus::{GGmlType, GGufMetaDataValueType, GENERAL_ARCHITECTURE};
 use regex::Regex;
 use std::collections::HashMap;
 
@@ -45,7 +45,7 @@ impl Content<'_> {
             .get(GENERAL_ARCHITECTURE)
             .expect("missing architecture")
             .value_reader()
-            .read_str()
+            .read_general_architecture_val()
         {
             Ok("llama") => {}
             Ok(arch) => todo!("unsupported architecture: {arch}"),
@@ -53,6 +53,3 @@ impl Content<'_> {
         }
     }
 }
-
-const GENERAL_ARCHITECTURE: &str = "general.architecture";
-const LLAMA_BLOCK_COUNT: &str = "llama.block_count";

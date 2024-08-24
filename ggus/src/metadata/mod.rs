@@ -1,13 +1,11 @@
 //! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
 
 mod meta_kv;
+pub(crate) mod standard;
 mod types;
 
 pub use meta_kv::GGufMetaKV;
 pub use types::{GGmlTokenType, GGufFileType};
-
-pub const GENERAL_ALIGNMENT: &str = "general.alignment";
-pub const DEFAULT_ALIGNMENT: usize = 32;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]

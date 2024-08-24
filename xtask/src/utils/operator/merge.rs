@@ -1,5 +1,5 @@
-﻿use super::{super::Tensor, Content, DataPromise, Operator, LLAMA_BLOCK_COUNT};
-use ggus::DataFuture;
+﻿use super::{super::Tensor, Content, DataPromise, Operator};
+use ggus::{llm_block_count, DataFuture};
 use indexmap::IndexMap;
 use memmap2::MmapMut;
 use regex::Regex;
@@ -28,8 +28,8 @@ impl Content<'_> {
         if ty {
             let blk = self
                 .meta_kvs
-                .get(LLAMA_BLOCK_COUNT)
-                .map(|kv| kv.value_reader().read::<u32>().unwrap())
+                .get(&*llm_block_count("llama"))
+                .map(|kv| kv.value_reader().read_llm_block_count_val().unwrap())
                 .expect("missing block count");
 
             self.merge(blk as _);

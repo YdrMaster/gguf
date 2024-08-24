@@ -61,7 +61,10 @@ impl<'a> GGuf<'a> {
             let kv = reader.read_meta_kv().map_err(Reading)?;
             let k = kv.key();
             if k == GENERAL_ALIGNMENT {
-                alignment = kv.value_reader().read::<u32>().map_err(Reading)? as _;
+                alignment = kv
+                    .value_reader()
+                    .read_general_alignment_val()
+                    .map_err(Reading)? as _;
             }
             if meta_kvs.insert(k, kv).is_some() {
                 return Err(DuplicateMetaKey(k.into()));

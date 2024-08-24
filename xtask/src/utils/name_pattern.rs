@@ -1,5 +1,8 @@
 ﻿use regex::Regex;
-use std::{fmt, sync::OnceLock};
+use std::{
+    fmt,
+    sync::{LazyLock, OnceLock},
+};
 
 #[inline]
 pub(crate) fn compile_patterns(patterns: &str) -> Regex {
@@ -37,11 +40,9 @@ impl fmt::Display for Pattern<'_> {
             } else if s.chars().all(|c| c == '*') {
                 r"(\w+\.)*\w+".into()
             } else {
-                static REGEX: OnceLock<Regex> = OnceLock::new();
+                static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\*+").unwrap());
                 // 消除任何连续 *
-                REGEX
-                    .get_or_init(|| Regex::new(r"\*+").unwrap())
-                    .replace_all(s, r"\w*")
+                REGEX.replace_all(s, r"\w*")
             }
         });
 

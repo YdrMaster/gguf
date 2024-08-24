@@ -187,6 +187,7 @@ version = "0.2.0"
 dependencies = [
  "fancy-regex",
  "indexmap",
+ "meta-kv-macro",
 ]
 
 [[package]]
@@ -256,6 +257,10 @@ checksum = "fe751422e4a8caa417e13c3ea66452215d7d63e19e604f4980461212f3ae1322"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "meta-kv-macro"
+version = "0.0.0"
 
 [[package]]
 name = "proc-macro2"

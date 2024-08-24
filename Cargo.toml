@@ -1,5 +1,5 @@
 [workspace]
-members = ["ggus", "xtask"]
+members = ["ggus", "meta-kv-macro", "xtask"]
 resolver = "2"
 
 [workspace.dependencies]

@@ -14,3 +14,4 @@ categories = ["parsing", "parser-implementations", "encoding"]
 [dependencies]
 indexmap.workspace = true
 fancy-regex = "0.13.0"
+meta-kv-macro = { path = "../meta-kv-macro" }
