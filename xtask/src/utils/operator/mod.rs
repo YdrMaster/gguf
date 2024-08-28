@@ -1,6 +1,7 @@
 ﻿mod cast;
 mod merge;
 mod set_meta;
+mod sort;
 
 use super::{compile_patterns, Content, DataPromise};
 use ggus::{GGmlType, GGufMetaDataValueType, GENERAL_ARCHITECTURE};
@@ -13,6 +14,7 @@ pub(crate) enum Operator {
     Cast(GGmlType),
     MergeLinear(bool),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
+    SortTensors,
 }
 
 impl Operator {
@@ -36,6 +38,7 @@ impl Content<'_> {
             Cast(ty) => self.cast(ty),
             MergeLinear(ty) => self.merge_linear(ty),
             SetMeta(map) => self.set_meta(map),
+            SortTensors => self.sort_tensors(),
         }
     }
 

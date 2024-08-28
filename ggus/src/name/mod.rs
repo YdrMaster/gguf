@@ -3,7 +3,7 @@ mod size_label;
 mod r#type;
 mod version;
 
-use fancy_regex::Regex;
+use fancy_regex::{Captures, Regex};
 use r#type::Type;
 use shard::Shard;
 use size_label::SizeLabel;
@@ -28,11 +28,7 @@ impl<'a> TryFrom<&'a str> for GGufFileName<'a> {
     type Error = GGufShardParseError;
 
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        // See: <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#validating-above-naming-convention>
-        const PATTERN: &str = r"^(?<BaseName>[A-Za-z0-9\s]*(?:(?:-(?:(?:[A-Za-z\s][A-Za-z0-9\s]*)|(?:[0-9\s]*)))*))-(?:(?<SizeLabel>(?:\d+x)?(?:\d+\.)?\d+[A-Za-z](?:-[A-Za-z]+(\d+\.)?\d+[A-Za-z]+)?)(?:-(?<FineTune>[A-Za-z0-9\s-]+))?)?-(?:(?<Version>v\d+(?:\.\d+)*))(?:-(?<Encoding>(?!LoRA|vocab)[\w_]+))?(?:-(?<Type>LoRA|vocab))?(?:-(?<Shard>\d{5}-of-\d{5}))?\.gguf$";
-        static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(PATTERN).unwrap());
-
-        let captures = REGEX.captures(value).unwrap().unwrap();
+        let captures = match_name(value);
         Ok(Self {
             base_name: captures.name("BaseName").unwrap().as_str().into(),
             size_label: captures
@@ -137,4 +133,17 @@ impl fmt::Display for GGufFileName<'_> {
         }
         write!(f, ".gguf")
     }
+}
+
+fn match_name(value: &str) -> Captures {
+    // See: <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#validating-above-naming-convention>
+    const PATTERN: &str = r"^(?<BaseName>[A-Za-z0-9\s]*(?:(?:-(?:(?:[A-Za-z\s][A-Za-z0-9\s]*)|(?:[0-9\s]*)))*))-(?:(?<SizeLabel>(?:\d+x)?(?:\d+\.)?\d+[A-Za-z](?:-[A-Za-z]+(\d+\.)?\d+[A-Za-z]+)?)(?:-(?<FineTune>[A-Za-z0-9\s-]+))?)?-(?:(?<Version>v\d+(?:\.\d+)*))(?:-(?<Encoding>(?!LoRA|vocab)[\w_]+))?(?:-(?<Type>LoRA|vocab))?(?:-(?<Shard>\d{5}-of-\d{5}))?\.gguf$";
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(PATTERN).unwrap());
+
+    REGEX.captures(value).unwrap().unwrap()
+}
+
+#[test]
+fn test_name() {
+    match_name("TinyEnsemble-3x1.1B-v0.0-TinyMoE_Q2_K.gguf");
 }

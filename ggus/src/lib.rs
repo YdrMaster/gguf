@@ -14,7 +14,7 @@ pub use header::GGufFileHeader;
 pub use metadata::{standard::*, GGmlTokenType, GGufFileType, GGufMetaDataValueType, GGufMetaKV};
 pub use name::{GGufFileName, GGufShardParseError};
 pub use read::{GGufReadError, GGufReader};
-pub use tensor::{GGmlType, GGufTensorInfo, GGufTensorMeta};
+pub use tensor::{GGmlType, GGmlTypeSize, GGufTensorInfo, GGufTensorMeta};
 pub use write::{
     DataFuture, GGufFileSimulator, GGufFileWriter, GGufTensorSimulator, GGufTensorWriter,
     GGufWriter,

@@ -51,6 +51,8 @@ impl ConvertArgs {
                     Operator::cast(content)
                 } else if let Some(content) = op.strip_prefix("merge:") {
                     Operator::merge_linear(content)
+                } else if op == "sort" {
+                    Operator::sort_tensors()
                 } else {
                     panic!("Unsupported operation: {}", op)
                 }

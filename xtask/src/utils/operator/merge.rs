@@ -164,7 +164,7 @@ impl<'a> MergeCollector<'a, 3> {
                     let v = v.get();
 
                     let len = q.len() + k.len() + v.len();
-                    assert_eq!(len, (c * r) as usize * ty.nbytes());
+                    assert_eq!(len, ty.size().elements_to_bytes(&[c, r]));
 
                     let mut dst = MmapMut::map_anon(len).unwrap();
                     let (q_, tail) = dst.split_at_mut(q.len());
@@ -229,7 +229,7 @@ impl<'a> MergeCollector<'a, 2> {
                     let up = up.get();
 
                     let len = gate.len() + up.len();
-                    assert_eq!(len, (c * r) as usize * ty.nbytes());
+                    assert_eq!(len, ty.size().elements_to_bytes(&[c, r]));
 
                     let mut dst = MmapMut::map_anon(len).unwrap();
                     let (gate_, up_) = dst.split_at_mut(gate.len());
@@ -248,18 +248,17 @@ fn split_qkv<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
     };
 
     let ty = tensor.ty;
-    let d = ty.nbytes();
     let rq = c;
     let rkv = (r - c) / 2;
+    let size = ty.size();
+    let dq = size.elements_to_bytes(&[c, rq]);
+    let dkv = size.elements_to_bytes(&[c, rkv]);
     let q = {
         let data = tensor.data.clone();
         Tensor {
             ty,
             shape: vec![c, rq],
-            data: DataPromise::lazy(move || {
-                let len = (c * rq) as usize * d;
-                copy_to_mmap(&data.get()[..len])
-            }),
+            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[..dq])),
         }
     };
     let k = {
@@ -267,11 +266,7 @@ fn split_qkv<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
         Tensor {
             ty,
             shape: vec![c, rkv],
-            data: DataPromise::lazy(move || {
-                let off = (c * rq) as usize * d;
-                let len = (c * rkv) as usize * d;
-                copy_to_mmap(&data.get()[off..][..len])
-            }),
+            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[dq..][..dkv])),
         }
     };
     let v = {
@@ -279,10 +274,7 @@ fn split_qkv<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
         Tensor {
             ty,
             shape: vec![c, rkv],
-            data: DataPromise::lazy(move || {
-                let off = (c * (rq + rkv)) as usize * d;
-                copy_to_mmap(&data.get()[off..])
-            }),
+            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[dq + dkv..])),
         }
     };
     (q, k, v)
@@ -294,17 +286,14 @@ fn split_gate_up<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>) {
     };
 
     let ty = tensor.ty;
-    let d = ty.nbytes();
     let r = r / 2;
+    let d = ty.size().elements_to_bytes(&[c, r]);
     let gate = {
         let data = tensor.data.clone();
         Tensor {
             ty,
             shape: vec![c, r],
-            data: DataPromise::lazy(move || {
-                let len = (c * r) as usize * d;
-                copy_to_mmap(&data.get()[..len])
-            }),
+            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[..d])),
         }
     };
     let up = {
@@ -312,10 +301,7 @@ fn split_gate_up<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>) {
         Tensor {
             ty,
             shape: vec![c, r],
-            data: DataPromise::lazy(move || {
-                let len = (c * r) as usize * d;
-                copy_to_mmap(&data.get()[len..])
-            }),
+            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[d..])),
         }
     };
     (gate, up)

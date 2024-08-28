@@ -84,7 +84,7 @@ impl<T: Write, U: DataFuture> GGufTensorWriter<T, U> {
             .write_tensor_info(name, shape, ty, self.offset as _)
             .unwrap();
 
-        let len = shape.iter().product::<u64>() as usize * ty.nbytes();
+        let len = ty.size().elements_to_bytes(shape);
         self.offset += len;
         self.data.push(data);
 
