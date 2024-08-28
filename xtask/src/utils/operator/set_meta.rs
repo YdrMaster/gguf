@@ -1,6 +1,7 @@
 ﻿use super::{super::MetaValue, Content, Operator};
 use ggus::{GGufMetaDataValueType as Ty, GGufWriter, GENERAL_ALIGNMENT};
 use internal::StrCollector;
+use log::warn;
 use regex::Regex;
 use std::{collections::HashMap, fmt::Debug, str::FromStr, sync::LazyLock};
 
@@ -25,8 +26,10 @@ impl Content<'_> {
     pub(super) fn set_meta(&mut self, mut map: HashMap<String, (Ty, Vec<u8>)>) {
         for (k, v) in &mut self.meta_kvs {
             if let Some((ty, vec)) = map.remove(&**k) {
-                // 禁止修改元信息类型
-                assert_eq!(v.ty, ty);
+                if v.ty != ty {
+                    warn!("Meta {k} type changed from {:?} to {:?}", v.ty, ty);
+                    v.ty = ty;
+                }
                 v.value = vec.into();
             }
         }

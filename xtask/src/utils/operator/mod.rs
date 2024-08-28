@@ -48,9 +48,11 @@ impl Content<'_> {
     fn arch(&self) -> &str {
         self.meta_kvs
             .get(GENERAL_ARCHITECTURE)
+            .map(|v| {
+                assert_eq!(v.ty, GGufMetaDataValueType::String);
+                v.value_reader().read_general_architecture_val()
+            })
             .expect("missing architecture")
-            .value_reader()
-            .read_general_architecture_val()
             .unwrap_or_else(|e| panic!("failed to read architecture: {e:?}"))
     }
 

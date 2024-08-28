@@ -44,8 +44,8 @@ pub enum GGmlType {
 
 #[derive(Clone, Copy, Debug)]
 pub struct GGmlTypeSize {
-    block_size: u32,
-    type_size: u32,
+    pub block_size: u32,
+    pub type_size: u32,
 }
 
 impl GGmlTypeSize {
