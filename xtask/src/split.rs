@@ -1,4 +1,7 @@
-﻿use crate::utils::{operate, show_file_info, OutputConfig};
+﻿use crate::{
+    utils::{operate, show_file_info, OutputConfig},
+    LogArgs,
+};
 use ggus::GGufFileName;
 use std::{ops::Deref, path::PathBuf};
 
@@ -18,6 +21,9 @@ pub struct SplitArgs {
     /// If set, the first shard will not contain any tensor
     #[clap(long, short)]
     no_tensor_first: bool,
+
+    #[clap(flatten)]
+    log: LogArgs,
 }
 
 impl SplitArgs {
@@ -28,7 +34,9 @@ impl SplitArgs {
             max_tensors,
             max_bytes,
             no_tensor_first,
+            log,
         } = self;
+        log.init();
 
         let name: GGufFileName = file.deref().try_into().unwrap();
         if name.shard_count() > 1 {

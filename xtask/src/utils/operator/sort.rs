@@ -10,7 +10,7 @@ impl Operator {
 }
 
 impl Content<'_> {
-    pub fn sort_tensors(&mut self) {
+    pub(super) fn sort_tensors(&mut self) {
         self.assert_llama();
         let tensors = std::mem::take(&mut self.tensors);
         self.tensors = tensors

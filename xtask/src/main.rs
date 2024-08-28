@@ -45,3 +45,40 @@ enum Commands {
     /// Set metadata of gguf files
     SetMeta(set_meta::SetMetaArgs),
 }
+
+#[derive(Args, Default)]
+struct LogArgs {
+    /// Log level, may be "off", "trace", "debug", "info" or "error".
+    #[clap(long)]
+    log: Option<String>,
+}
+
+impl LogArgs {
+    fn init(self) {
+        use log::LevelFilter;
+        use simple_logger::SimpleLogger;
+        use time::UtcOffset;
+
+        let level = self
+            .log
+            .and_then(|level| match level.to_lowercase().as_str() {
+                "off" | "none" => Some(LevelFilter::Off),
+                "all" | "trace" => Some(LevelFilter::Trace),
+                "debug" => Some(LevelFilter::Debug),
+                "info" => Some(LevelFilter::Info),
+                "error" => Some(LevelFilter::Error),
+                _ => None,
+            })
+            .unwrap_or(LevelFilter::Warn);
+
+        const EAST8: UtcOffset = match UtcOffset::from_hms(8, 0, 0) {
+            Ok(it) => it,
+            Err(_) => unreachable!(),
+        };
+        SimpleLogger::new()
+            .with_level(level)
+            .with_utc_offset(UtcOffset::current_local_offset().unwrap_or(EAST8))
+            .init()
+            .unwrap();
+    }
+}

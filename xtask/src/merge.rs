@@ -1,4 +1,7 @@
-﻿use crate::utils::{operate, show_file_info, OutputConfig};
+﻿use crate::{
+    utils::{operate, show_file_info, OutputConfig},
+    LogArgs,
+};
 use ggus::GGufFileName;
 use std::{ops::Deref, path::PathBuf};
 
@@ -9,11 +12,19 @@ pub struct MergeArgs {
     /// Output directory for merged file
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
+
+    #[clap(flatten)]
+    log: LogArgs,
 }
 
 impl MergeArgs {
     pub fn merge(self) {
-        let Self { file, output_dir } = self;
+        let Self {
+            file,
+            output_dir,
+            log,
+        } = self;
+        log.init();
 
         let dir = file.parent().unwrap();
         let name: GGufFileName = file.deref().try_into().unwrap();

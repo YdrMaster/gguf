@@ -1,4 +1,7 @@
-﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
+﻿use crate::{
+    utils::{operate, show_file_info, Operator, OutputConfig},
+    LogArgs,
+};
 use ggus::GGufFileName;
 use std::path::PathBuf;
 
@@ -21,6 +24,9 @@ pub struct ConvertArgs {
     /// If set, the first shard will not contain any tensor
     #[clap(long, short)]
     no_tensor_first: bool,
+
+    #[clap(flatten)]
+    log: LogArgs,
 }
 
 impl ConvertArgs {
@@ -32,29 +38,27 @@ impl ConvertArgs {
             max_tensors,
             max_bytes,
             no_tensor_first,
+            log,
         } = self;
+        log.init();
 
         let name = GGufFileName::try_from(&*file).unwrap();
         let dir = file.parent().unwrap();
         let files = operate(
             name.clone(),
-            name.clone()
-                .iter_all()
-                .map(|name| dir.join(name.to_string())),
+            name.iter_all().map(|name| dir.join(name.to_string())),
             ops.split("->").map(|op| {
                 let op = op.trim();
-                if let Some(content) = op.strip_prefix("filter-meta:") {
-                    Operator::filter_meta_key(content)
-                } else if let Some(content) = op.strip_prefix("filter-tensor:") {
-                    Operator::filter_tensor_name(content)
-                } else if let Some(content) = op.strip_prefix("cast:") {
-                    Operator::cast(content)
-                } else if let Some(content) = op.strip_prefix("merge:") {
-                    Operator::merge_linear(content)
-                } else if op == "sort" {
-                    Operator::sort_tensors()
-                } else {
-                    panic!("Unsupported operation: {}", op)
+                match op.split_once(':') {
+                    Some(("filter-meta", key)) => Operator::filter_meta_key(key),
+                    Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),
+                    Some(("cast", dtype)) => Operator::cast(dtype),
+                    Some(("merge", val)) => Operator::merge_linear(val),
+                    Some(("distribute", n)) => Operator::distribute(n),
+                    _ => match op {
+                        "sort" => Operator::sort_tensors(),
+                        _ => panic!("Unsupported operation: {op}"),
+                    },
                 }
             }),
             OutputConfig {

@@ -1,4 +1,7 @@
-﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
+﻿use crate::{
+    utils::{operate, show_file_info, Operator, OutputConfig},
+    LogArgs,
+};
 use ggus::GGufFileName;
 use std::path::PathBuf;
 
@@ -15,6 +18,9 @@ pub struct FilterArgs {
     /// Tensors to keep
     #[clap(long, short = 't', default_value = "*")]
     filter_tensor: String,
+
+    #[clap(flatten)]
+    log: LogArgs,
 }
 
 impl FilterArgs {
@@ -24,7 +30,9 @@ impl FilterArgs {
             output_dir,
             filter_meta,
             filter_tensor,
+            log,
         } = self;
+        log.init();
 
         let files = operate(
             GGufFileName::try_from(&*file).unwrap(),

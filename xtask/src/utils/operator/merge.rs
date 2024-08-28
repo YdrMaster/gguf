@@ -1,9 +1,8 @@
-﻿use super::{super::Tensor, Content, DataPromise, Operator};
+﻿use super::{super::Tensor, Content, DataPromise, Operator, BLK_TENSOR_REGEX};
 use ggus::{llm_block_count, DataFuture};
 use indexmap::IndexMap;
 use memmap2::MmapMut;
-use regex::Regex;
-use std::{borrow::Cow, sync::LazyLock};
+use std::borrow::Cow;
 
 impl Operator {
     pub fn merge_linear(m: impl AsRef<str>) -> Self {
@@ -17,14 +16,16 @@ impl Operator {
 }
 
 impl Content<'_> {
-    pub(super) fn merge_linear(&mut self, ty: bool) {
-        self.assert_llama();
+    pub(super) fn is_linear_merged(&self) -> bool {
+        self.tensors.contains_key("blk.0.attn_qkv.weight")
+    }
 
-        if self.tensors.contains_key("blk.0.attn_qkv.weight") == ty {
-            assert_eq!(self.tensors.contains_key("blk.0.ffn_gate_up.weight"), ty);
+    pub(super) fn merge_linear(&mut self, ty: bool) {
+        if self.is_linear_merged() == ty {
             return;
         }
 
+        self.assert_llama();
         if ty {
             let blk = self
                 .meta_kvs
@@ -44,7 +45,7 @@ impl Content<'_> {
 
         let tensors = std::mem::take(&mut self.tensors);
         for (name, tensor) in tensors {
-            let Some(captures) = REGEX.captures(&name) else {
+            let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
                 self.tensors.insert(name, tensor);
                 continue;
             };
@@ -64,7 +65,7 @@ impl Content<'_> {
     fn split(&mut self) {
         let tensors = std::mem::take(&mut self.tensors);
         for (name, tensor) in tensors {
-            let Some(captures) = REGEX.captures(&name) else {
+            let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
                 self.tensors.insert(name, tensor);
                 continue;
             };
@@ -94,9 +95,6 @@ impl Content<'_> {
         }
     }
 }
-
-static REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^blk\.(\d+)\.(\w+)\.weight$").unwrap());
 
 struct Blk<'a, const N: usize>([Option<Tensor<'a>>; N]);
 

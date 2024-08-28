@@ -13,3 +13,7 @@ regex = "1.10"
 rayon = "1.10"
 half = "2.4"
 clap = { version = "4.5", features = ["derive"] }
+
+time = "0.3"
+log = "0.4"
+simple_logger = "5.0"

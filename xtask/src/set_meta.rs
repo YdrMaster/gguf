@@ -1,4 +1,7 @@
-﻿use crate::utils::{operate, show_file_info, Operator, OutputConfig};
+﻿use crate::{
+    utils::{operate, show_file_info, Operator, OutputConfig},
+    LogArgs,
+};
 use ggus::GGufFileName;
 use std::{fs::read_to_string, path::PathBuf};
 
@@ -11,6 +14,9 @@ pub struct SetMetaArgs {
     /// Output directory for changed file
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
+
+    #[clap(flatten)]
+    log: LogArgs,
 }
 
 impl SetMetaArgs {
@@ -19,7 +25,9 @@ impl SetMetaArgs {
             file,
             meta_kvs,
             output_dir,
+            log,
         } = self;
+        log.init();
 
         let cfg = read_to_string(meta_kvs).unwrap();
         // 消除 utf-8 BOM

@@ -21,6 +21,8 @@ cargo xtask --help
 ```
 
 ```plaintext
+gguf-utils is a command-line tool for working with gguf files
+
 Usage: xtask.exe <COMMAND>
 
 Commands:
@@ -56,6 +58,7 @@ Options:
   -n, --array-detail <ARRAY_DETAIL>    How many elements to show in arrays, `all` for all elements [default: 8]
   -m, --filter-meta <FILTER_META>      Meta to show [default: *]
   -t, --filter-tensor <FILTER_TENSOR>  Tensors to show [default: *]
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                           Print help
 ```
 
@@ -77,6 +80,7 @@ Options:
   -o, --output-dir <OUTPUT_DIR>        Output directory for filtered file
   -m, --filter-meta <FILTER_META>      Meta to keep [default: *]
   -t, --filter-tensor <FILTER_TENSOR>  Tensors to keep [default: *]
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                           Print help
 ```
 
@@ -99,6 +103,7 @@ Options:
   -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
   -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
   -n, --no-tensor-first            If set, the first shard will not contain any tensor
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                       Print help
 ```
 
@@ -118,6 +123,7 @@ Arguments:
 
 Options:
   -o, --output-dir <OUTPUT_DIR>  Output directory for merged file
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                     Print help
 ```
 
@@ -141,6 +147,7 @@ Options:
   -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
   -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
   -n, --no-tensor-first            If set, the first shard will not contain any tensor
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                       Print help
 ```
 
@@ -161,6 +168,7 @@ Arguments:
 
 Options:
   -o, --output-dir <OUTPUT_DIR>  Output directory for changed file
+      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                     Print help
 ```
 

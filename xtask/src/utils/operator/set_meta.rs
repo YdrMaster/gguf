@@ -22,7 +22,7 @@ impl Operator {
 }
 
 impl Content<'_> {
-    pub fn set_meta(&mut self, mut map: HashMap<String, (Ty, Vec<u8>)>) {
+    pub(super) fn set_meta(&mut self, mut map: HashMap<String, (Ty, Vec<u8>)>) {
         for (k, v) in &mut self.meta_kvs {
             if let Some((ty, vec)) = map.remove(&**k) {
                 // 禁止修改元信息类型

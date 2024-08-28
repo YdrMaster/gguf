@@ -1,4 +1,5 @@
 ﻿mod cast;
+mod distribute;
 mod merge;
 mod set_meta;
 mod sort;
@@ -6,7 +7,7 @@ mod sort;
 use super::{compile_patterns, Content, DataPromise};
 use ggus::{GGmlType, GGufMetaDataValueType, GENERAL_ARCHITECTURE};
 use regex::Regex;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::LazyLock};
 
 pub(crate) enum Operator {
     FilterMetaKey(Regex),
@@ -15,6 +16,7 @@ pub(crate) enum Operator {
     MergeLinear(bool),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
     SortTensors,
+    Distribute(usize),
 }
 
 impl Operator {
@@ -39,20 +41,26 @@ impl Content<'_> {
             MergeLinear(ty) => self.merge_linear(ty),
             SetMeta(map) => self.set_meta(map),
             SortTensors => self.sort_tensors(),
+            Distribute(n) => self.distribute(n),
         }
     }
 
-    fn assert_llama(&self) {
-        match self
-            .meta_kvs
+    fn arch(&self) -> &str {
+        self.meta_kvs
             .get(GENERAL_ARCHITECTURE)
             .expect("missing architecture")
             .value_reader()
             .read_general_architecture_val()
-        {
-            Ok("llama") => {}
-            Ok(arch) => todo!("unsupported architecture: {arch}"),
-            Err(e) => panic!("failed to read architecture: {e:?}"),
+            .unwrap_or_else(|e| panic!("failed to read architecture: {e:?}"))
+    }
+
+    fn assert_llama(&self) {
+        match self.arch() {
+            "llama" => {}
+            arch => todo!("unsupported architecture: {arch}"),
         }
     }
 }
+
+static BLK_TENSOR_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^blk\.(\d+)\.(\w+)\.weight$").unwrap());
