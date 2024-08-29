@@ -103,7 +103,7 @@ Options:
   -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
   -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
   -n, --no-tensor-first            If set, the first shard will not contain any tensor
-      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
+      --log <LOG>                  Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                       Print help
 ```
 
@@ -123,7 +123,7 @@ Arguments:
 
 Options:
   -o, --output-dir <OUTPUT_DIR>  Output directory for merged file
-      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
+      --log <LOG>                Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                     Print help
 ```
 
@@ -136,18 +136,18 @@ cargo convert --help
 ```plaintext
 Convert gguf files to different format
 
-Usage: xtask.exe convert [OPTIONS] --ops <OPS> <FILE>
+Usage: xtask.exe convert [OPTIONS] --steps <STEPS> <FILE>
 
 Arguments:
   <FILE>  File to convert
 
 Options:
   -o, --output-dir <OUTPUT_DIR>    Output directory for converted files
-      --ops <OPS>                  Operations to apply, separated by "->"
+  -x, --steps <STEPS>              Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>", "cast:<dtype>" or "distribute:<n>"
   -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
   -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
   -n, --no-tensor-first            If set, the first shard will not contain any tensor
-      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
+      --log <LOG>                  Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                       Print help
 ```
 
@@ -168,7 +168,7 @@ Arguments:
 
 Options:
   -o, --output-dir <OUTPUT_DIR>  Output directory for changed file
-      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
+      --log <LOG>                Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                     Print help
 ```
 
@@ -211,9 +211,15 @@ Options:
 这是一个配置元信息的示例文件内容：
 
 ```plaintext
-`general.alignment` u32 128
-`tokenizer.chat_template` str|
+`llama.block_count`             u64 22
+`llama.context_length`          u64 2048
+`llama.embedding_length`        u64 2048
+`llama.feed_forward_length`     u64 5632
+`llama.attention.head_count`    u64 32
+`llama.attention.head_count_kv` u64 4
+`llama.rope.dimension_count`    u64 64
 
+`tokenizer.chat_template` str|
 | {%- for message in messages -%}
 | {%- if message['role'] == 'user' -%}
 | {{ '<|user|>
