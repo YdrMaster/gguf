@@ -10,13 +10,13 @@ impl<'a> GGufReader<'a> {
 
         let _k = self.read_str()?;
         let ty = self.read()?;
-        self.skip_meta_value(ty, 1)?;
+        self.read_meta_value(ty, 1)?;
 
         let data = &data[..data.len() - self.remaining().len()];
         Ok(unsafe { GGufMetaKV::new_unchecked(data) })
     }
 
-    fn skip_meta_value(&mut self, ty: Ty, len: usize) -> Result<&mut Self, GGufReadError> {
+    fn read_meta_value(&mut self, ty: Ty, len: usize) -> Result<&mut Self, GGufReadError> {
         match ty {
             Ty::U8 => self.skip::<u8>(len),
             Ty::I8 => self.skip::<i8>(len),
@@ -42,7 +42,7 @@ impl<'a> GGufReader<'a> {
             }
             Ty::Array => {
                 let (ty, len) = self.read_arr_header()?;
-                self.skip_meta_value(ty, len)
+                self.read_meta_value(ty, len)
             }
         }
     }
@@ -88,6 +88,38 @@ impl<'a> GGufMetaKV<'a> {
         let mut reader = self.reader();
         reader.skip_str().unwrap().skip::<Ty>(1).unwrap();
         reader
+    }
+
+    pub fn read_integer(&self) -> isize {
+        let mut reader = self.reader();
+        let ty = reader.skip_str().unwrap().read::<Ty>().unwrap();
+        match ty {
+            Ty::Bool | Ty::U8 => reader.read::<u8>().unwrap().into(),
+            Ty::I8 => reader.read::<i8>().unwrap().into(),
+            Ty::U16 => reader.read::<u16>().unwrap().try_into().unwrap(),
+            Ty::I16 => reader.read::<i16>().unwrap().into(),
+            Ty::U32 => reader.read::<u32>().unwrap().try_into().unwrap(),
+            Ty::I32 => reader.read::<i32>().unwrap().try_into().unwrap(),
+            Ty::U64 => reader.read::<u64>().unwrap().try_into().unwrap(),
+            Ty::I64 => reader.read::<i64>().unwrap().try_into().unwrap(),
+            Ty::Array | Ty::String | Ty::F32 | Ty::F64 => panic!("not an integer type"),
+        }
+    }
+
+    pub fn read_unsigned(&self) -> usize {
+        let mut reader = self.reader();
+        let ty = reader.skip_str().unwrap().read::<Ty>().unwrap();
+        match ty {
+            Ty::Bool | Ty::U8 => reader.read::<u8>().unwrap().into(),
+            Ty::U16 => reader.read::<u16>().unwrap().into(),
+            Ty::U32 => reader.read::<u32>().unwrap().try_into().unwrap(),
+            Ty::U64 => reader.read::<u64>().unwrap().try_into().unwrap(),
+            Ty::I8 => reader.read::<i8>().unwrap().try_into().unwrap(),
+            Ty::I16 => reader.read::<i16>().unwrap().try_into().unwrap(),
+            Ty::I32 => reader.read::<i32>().unwrap().try_into().unwrap(),
+            Ty::I64 => reader.read::<i64>().unwrap().try_into().unwrap(),
+            Ty::Array | Ty::String | Ty::F32 | Ty::F64 => panic!("not an integer type"),
+        }
     }
 
     #[inline]

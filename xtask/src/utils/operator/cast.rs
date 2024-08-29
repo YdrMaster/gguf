@@ -1,6 +1,6 @@
 ﻿use super::{Content, DataPromise, Operator};
 use ggus::{DataFuture, GGmlType};
-use half::f16;
+use half::{bf16, f16};
 use memmap2::MmapMut;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{
@@ -14,6 +14,7 @@ impl Operator {
         Self::Cast(match t.to_lowercase().as_str() {
             "f16" | "fp16" | "half" => GGmlType::F16,
             "f32" | "fp32" | "float" => GGmlType::F32,
+            "bf16" => GGmlType::BF16,
             _ => panic!("unsupported cast type: {t}"),
         })
     }
@@ -34,16 +35,22 @@ impl Content<'_> {
                 tensor.data = DataPromise::lazy(move || {
                     use GGmlType as Ty;
                     let data = data.get();
-                    match (from, to) {
-                        (Ty::F32, Ty::F16) => cast(data, |&x| f16::from_f32(x)),
-                        (Ty::F16, Ty::F32) => cast(data, |&x| f16::to_f32(x)),
+                    #[rustfmt::skip]
+                    let ans = match (from, to) {
+                        (Ty::F32 , Ty::F16 ) => cast(data,            f16::from_f32            ),
+                        (Ty::F32 , Ty::BF16) => cast(data,           bf16::from_f32            ),
+                        (Ty::F16 , Ty::F32 ) => cast(data,            f16::to_f32              ),
+                        (Ty::BF16, Ty::F32 ) => cast(data,           bf16::to_f32              ),
+                        (Ty::F16 , Ty::BF16) => cast(data, |x: f16 | bf16::from_f32(x.to_f32())),
+                        (Ty::BF16, Ty::F16 ) => cast(data, |x: bf16|  f16::from_f32(x.to_f32())),
                         (_, _) => todo!("unsupported cast: {from:?} -> {to:?}"),
-                    }
+                    };
+                    ans
                 });
             }
         }
 
-        fn cast<T: Sync, U: Send>(data: &[u8], f: fn(&T) -> U) -> MmapMut {
+        fn cast<T: Copy + Sync, U: Send>(data: &[u8], f: fn(T) -> U) -> MmapMut {
             let len = data.len() / size_of::<T>();
 
             let size = Layout::array::<U>(len).unwrap().size();
@@ -55,7 +62,7 @@ impl Content<'_> {
                     from_raw_parts(data.as_ptr().cast::<T>(), len),
                 )
             };
-            dst.into_par_iter().zip(src).for_each(|(y, x)| *y = f(x));
+            dst.into_par_iter().zip(src).for_each(|(y, x)| *y = f(*x));
 
             ans
         }
