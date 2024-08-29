@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod ident_collector;
 
 use ident_collector::IdentCollector;

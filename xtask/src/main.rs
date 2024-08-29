@@ -1,3 +1,5 @@
+#![deny(warnings)]
+
 mod convert;
 mod filter;
 mod merge;

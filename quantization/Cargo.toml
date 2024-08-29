@@ -1,0 +1,9 @@
+[package]
+name = "quantization"
+version = "0.1.0"
+edition = "2021"
+authors = ["YdrMaster <ydrml@hotmail.com>"]
+
+[dependencies]
+rayon.workspace = true
+half.workspace = true

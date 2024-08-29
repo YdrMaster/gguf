@@ -5,13 +5,14 @@ edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
 
 [dependencies]
-ggus = { version = "*", path = "../ggus" }
+ggus.path = "../ggus"
+quantization.path = "../quantization"
 indexmap.workspace = true
+rayon.workspace = true
+half.workspace = true
 itertools = "0.13.0"
 memmap2 = "0.9"
 regex = "1.10"
-rayon = "1.10"
-half = "2.4"
 clap = { version = "4.5", features = ["derive"] }
 
 time = "0.3"
