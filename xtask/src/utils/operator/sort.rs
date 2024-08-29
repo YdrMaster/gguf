@@ -1,13 +1,6 @@
-﻿use super::{Content, Operator};
+﻿use super::Content;
 use itertools::Itertools;
 use std::{collections::HashMap, sync::LazyLock};
-
-impl Operator {
-    #[inline]
-    pub fn sort_tensors() -> Self {
-        Self::SortTensors
-    }
-}
 
 impl Content<'_> {
     pub(super) fn sort_tensors(&mut self) {

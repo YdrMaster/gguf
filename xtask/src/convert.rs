@@ -12,9 +12,9 @@ pub struct ConvertArgs {
     /// Output directory for converted files
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
-    /// Operations to apply, separated by "->"
-    #[clap(long)]
-    ops: String,
+    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>", "cast:<dtype>" or "distribute:<n>"
+    #[clap(long, short = 'x')]
+    steps: String,
     /// Max count of tensors per shard
     #[clap(long, short = 't')]
     max_tensors: Option<usize>,
@@ -34,7 +34,7 @@ impl ConvertArgs {
         let Self {
             file,
             output_dir,
-            ops,
+            steps,
             max_tensors,
             max_bytes,
             no_tensor_first,
@@ -47,19 +47,17 @@ impl ConvertArgs {
         let files = operate(
             name.clone(),
             name.iter_all().map(|name| dir.join(name.to_string())),
-            ops.split("->").map(|op| {
-                let op = op.trim();
-                match op.split_once(':') {
+            steps.split("->").map(|op| match op.trim() {
+                "sort" => Operator::SortTensors,
+                "merge-linear" => Operator::MergeLinear(true),
+                "split-linear" | "!merge-linear" => Operator::MergeLinear(false),
+                op => match op.split_once(':') {
                     Some(("filter-meta", key)) => Operator::filter_meta_key(key),
                     Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),
                     Some(("cast", dtype)) => Operator::cast(dtype),
-                    Some(("merge", val)) => Operator::merge_linear(val),
                     Some(("distribute", n)) => Operator::distribute(n),
-                    _ => match op {
-                        "sort" => Operator::sort_tensors(),
-                        _ => panic!("Unsupported operation: {op}"),
-                    },
-                }
+                    _ => panic!("Unsupported operation: {op}"),
+                },
             }),
             OutputConfig {
                 dir: output_dir,

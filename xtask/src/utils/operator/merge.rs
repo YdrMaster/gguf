@@ -1,20 +1,8 @@
-﻿use super::{super::Tensor, blk_tensor_name, Content, DataPromise, Operator, BLK_TENSOR_REGEX};
+﻿use super::{super::Tensor, blk_tensor_name, Content, DataPromise, BLK_TENSOR_REGEX};
 use ggus::{llm_block_count, DataFuture};
-use indexmap::IndexMap;
 use log::info;
 use memmap2::MmapMut;
 use std::borrow::Cow;
-
-impl Operator {
-    pub fn merge_linear(m: impl AsRef<str>) -> Self {
-        let m = m.as_ref().trim();
-        Self::MergeLinear(match m.to_lowercase().as_str() {
-            "yes" | "y" | "true" | "t" => true,
-            "no" | "n" | "false" | "f" => false,
-            _ => panic!("unsupported transpose type: {m}"),
-        })
-    }
-}
 
 impl Content<'_> {
     pub(super) fn is_linear_merged(&self) -> bool {
@@ -46,15 +34,15 @@ impl Content<'_> {
                     continue;
                 };
                 let i = &captures[1];
-                match &captures[2] {
-                    NAME_Q => qkv.put(&mut self.tensors, i, tensor, 0),
-                    NAME_K => qkv.put(&mut self.tensors, i, tensor, 1),
-                    NAME_V => qkv.put(&mut self.tensors, i, tensor, 2),
-                    NAME_GATE => gate_up.put(&mut self.tensors, i, tensor, 0),
-                    NAME_UP => gate_up.put(&mut self.tensors, i, tensor, 1),
-                    _ => {
-                        self.tensors.insert(name, tensor);
-                    }
+                if let Some((name, tensor)) = match &captures[2] {
+                    NAME_Q => qkv.put(tensor, i, 0),
+                    NAME_K => qkv.put(tensor, i, 1),
+                    NAME_V => qkv.put(tensor, i, 2),
+                    NAME_GATE => gate_up.put(tensor, i, 0),
+                    NAME_UP => gate_up.put(tensor, i, 1),
+                    _ => Some((name, tensor)),
+                } {
+                    self.tensors.insert(name, tensor);
                 }
             }
         } else {
@@ -68,13 +56,13 @@ impl Content<'_> {
                 let i = &captures[1];
                 match &captures[2] {
                     NAME_QKV => {
-                        let [q, k, v] = split_qkv(&tensor);
+                        let [q, k, v] = split_qkv(tensor);
                         self.tensors.insert(blk_tensor_name(i, NAME_Q), q);
                         self.tensors.insert(blk_tensor_name(i, NAME_K), k);
                         self.tensors.insert(blk_tensor_name(i, NAME_V), v);
                     }
                     NAME_GATE_UP => {
-                        let [gate, up] = split_gate_up(&tensor);
+                        let [gate, up] = split_gate_up(tensor);
                         self.tensors.insert(blk_tensor_name(i, NAME_GATE), gate);
                         self.tensors.insert(blk_tensor_name(i, NAME_UP), up);
                     }
@@ -108,16 +96,11 @@ impl<'a, const N: usize> MergeCollector<'a, N> {
         }
     }
 
-    fn collect(
-        &mut self,
-        i: impl AsRef<str>,
-        tensor: Tensor<'a>,
-        k: usize,
-    ) -> Option<(usize, [Tensor<'a>; N])> {
-        let i: usize = i.as_ref().parse().unwrap();
+    fn collect(&mut self, i: &str, tensor: Tensor<'a>, k: usize) -> Option<[Tensor<'a>; N]> {
+        let i: usize = i.parse().unwrap();
         self.buf[i][k] = Some(tensor);
         if self.buf[i].iter().all(Option::is_some) {
-            Some((i, std::array::from_fn(|k| self.buf[i][k].take().unwrap())))
+            Some(std::array::from_fn(|k| self.buf[i][k].take().unwrap()))
         } else {
             None
         }
@@ -125,50 +108,37 @@ impl<'a, const N: usize> MergeCollector<'a, N> {
 }
 
 impl<'a> MergeCollector<'a, NUM_QKV> {
-    fn put(
-        &mut self,
-        map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
-        i: impl AsRef<str>,
-        tensor: Tensor<'a>,
-        k: usize,
-    ) {
-        if let Some((i, [q, k, v])) = self.collect(i, tensor, k) {
+    fn put(&mut self, tensor: Tensor<'a>, i: &str, k: usize) -> Option<(Cow<'a, str>, Tensor<'a>)> {
+        self.collect(i, tensor, k).map(|[q, k, v]| {
             let qr = q.shape[1];
             let kr = k.shape[1];
             let vr = v.shape[1];
             assert_eq!(qr % kr, 0);
             assert!(qr >= kr);
             assert_eq!(kr, vr);
-            map.insert(blk_tensor_name(i, NAME_QKV), concat1([q, k, v]));
-        }
+            (blk_tensor_name(i, NAME_QKV), concat1([q, k, v]))
+        })
     }
 }
 
 impl<'a> MergeCollector<'a, NUM_GATE_UP> {
-    fn put(
-        &mut self,
-        map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
-        i: impl AsRef<str>,
-        tensor: Tensor<'a>,
-        k: usize,
-    ) {
-        if let Some((i, [gate, up])) = self.collect(i, tensor, k) {
+    fn put(&mut self, tensor: Tensor<'a>, i: &str, k: usize) -> Option<(Cow<'a, str>, Tensor<'a>)> {
+        self.collect(i, tensor, k).map(|[gate, up]| {
             assert_eq!(gate.shape[1], up.shape[1]);
-            map.insert(blk_tensor_name(i, NAME_GATE_UP), concat1([gate, up]));
-        }
+            (blk_tensor_name(i, NAME_GATE_UP), concat1([gate, up]))
+        })
     }
 }
 
-fn split_qkv<'a>(tensor: &Tensor<'a>) -> [Tensor<'a>; NUM_QKV] {
-    let [c, r, _] = distruct(tensor);
+fn split_qkv(tensor: Tensor) -> [Tensor; NUM_QKV] {
+    let [c, r, _] = distruct(&tensor);
     let rq = c;
     let rkv = (r - c) / 2;
     split1(tensor, [rq, rkv, rkv])
 }
 
-fn split_gate_up<'a>(tensor: &Tensor<'a>) -> [Tensor<'a>; NUM_GATE_UP] {
-    let [_, r, _] = distruct(tensor);
-    let r = r / 2;
+fn split_gate_up(tensor: Tensor) -> [Tensor; NUM_GATE_UP] {
+    let r = tensor.shape[1] / 2;
     split1(tensor, [r, r])
 }
 
@@ -197,7 +167,7 @@ macro_rules! split0 {
     };
 }
 
-fn concat1<'a, const N: usize>(tensors: [Tensor<'a>; N]) -> Tensor<'a> {
+fn concat1<const N: usize>(tensors: [Tensor; N]) -> Tensor {
     // 提取数据类型和形状
     let ty = tensors[0].ty;
     let [c, mut r, n] = distruct(&tensors[0]);
@@ -220,7 +190,7 @@ fn concat1<'a, const N: usize>(tensors: [Tensor<'a>; N]) -> Tensor<'a> {
             let len = data.iter().map(|s| s.len()).sum();
             assert_eq!(len, ty.size().elements_to_bytes(&[c, r, n]));
 
-            let n = n as usize;
+            let n = n as _;
             let mut ans = MmapMut::map_anon(len).unwrap();
             for i in 0..n {
                 let mut dst = &mut split0!(ans; len / n; [i]);
@@ -237,10 +207,10 @@ fn concat1<'a, const N: usize>(tensors: [Tensor<'a>; N]) -> Tensor<'a> {
     }
 }
 
-fn split1<'a, const N: usize>(tensor: &Tensor<'a>, split: [u64; N]) -> [Tensor<'a>; N] {
+fn split1<const N: usize>(tensor: Tensor, split: [u64; N]) -> [Tensor; N] {
     // 提取数据类型和形状
     let ty = tensor.ty;
-    let [c, r, n] = distruct(tensor);
+    let [c, r, n] = distruct(&tensor);
     assert_eq!(r, split.iter().sum());
     // 计算规模
     let size = ty.size();
@@ -256,7 +226,7 @@ fn split1<'a, const N: usize>(tensor: &Tensor<'a>, split: [u64; N]) -> [Tensor<'
             ty,
             shape: construct(c, r_, n),
             data: DataPromise::lazy(move || {
-                let n = n as usize;
+                let n = n as _;
                 let data = data.get();
                 assert_eq!(data.len(), d * n);
 
