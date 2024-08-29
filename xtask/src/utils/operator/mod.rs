@@ -7,7 +7,7 @@ mod sort;
 use super::{compile_patterns, Content, DataPromise};
 use ggus::{GGmlType, GGufMetaDataValueType, GENERAL_ARCHITECTURE};
 use regex::Regex;
-use std::{collections::HashMap, sync::LazyLock};
+use std::{borrow::Cow, collections::HashMap, fmt::Display, sync::LazyLock};
 
 pub(crate) enum Operator {
     FilterMetaKey(Regex),
@@ -66,3 +66,8 @@ impl Content<'_> {
 
 static BLK_TENSOR_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^blk\.(\d+)\.(\w+)\.weight$").unwrap());
+
+#[inline]
+fn blk_tensor_name(i: impl Display, name: impl Display) -> Cow<'static, str> {
+    format!("blk.{i}.{name}.weight").into()
+}

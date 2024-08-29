@@ -1,6 +1,7 @@
-﻿use super::{super::Tensor, Content, DataPromise, Operator, BLK_TENSOR_REGEX};
+﻿use super::{super::Tensor, blk_tensor_name, Content, DataPromise, Operator, BLK_TENSOR_REGEX};
 use ggus::{llm_block_count, DataFuture};
 use indexmap::IndexMap;
+use log::info;
 use memmap2::MmapMut;
 use std::borrow::Cow;
 
@@ -26,287 +27,247 @@ impl Content<'_> {
         }
 
         self.assert_llama();
+        let tensors = std::mem::take(&mut self.tensors);
         if ty {
+            info!("Merge linear");
+
             let blk = self
                 .meta_kvs
                 .get(&*llm_block_count("llama"))
                 .map(|kv| kv.value_reader().read_llm_block_count_val().unwrap())
-                .expect("missing block count");
+                .expect("missing block count") as _;
 
-            self.merge(blk as _);
-        } else {
-            self.split();
-        }
-    }
+            let mut qkv = MergeCollector::<NUM_QKV>::new(blk);
+            let mut gate_up = MergeCollector::<NUM_GATE_UP>::new(blk);
 
-    fn merge(&mut self, blk: usize) {
-        let mut qkv = MergeCollector::<3>::new(blk);
-        let mut gate_up = MergeCollector::<2>::new(blk);
-
-        let tensors = std::mem::take(&mut self.tensors);
-        for (name, tensor) in tensors {
-            let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
-                self.tensors.insert(name, tensor);
-                continue;
-            };
-            match &captures[2] {
-                "attn_q" => qkv.put(&mut self.tensors, &captures[1], tensor, 0),
-                "attn_k" => qkv.put(&mut self.tensors, &captures[1], tensor, 1),
-                "attn_v" => qkv.put(&mut self.tensors, &captures[1], tensor, 2),
-                "ffn_gate" => gate_up.put(&mut self.tensors, &captures[1], tensor, 0),
-                "ffn_up" => gate_up.put(&mut self.tensors, &captures[1], tensor, 1),
-                _ => {
+            for (name, tensor) in tensors {
+                let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
                     self.tensors.insert(name, tensor);
+                    continue;
+                };
+                let i = &captures[1];
+                match &captures[2] {
+                    NAME_Q => qkv.put(&mut self.tensors, i, tensor, 0),
+                    NAME_K => qkv.put(&mut self.tensors, i, tensor, 1),
+                    NAME_V => qkv.put(&mut self.tensors, i, tensor, 2),
+                    NAME_GATE => gate_up.put(&mut self.tensors, i, tensor, 0),
+                    NAME_UP => gate_up.put(&mut self.tensors, i, tensor, 1),
+                    _ => {
+                        self.tensors.insert(name, tensor);
+                    }
                 }
             }
-        }
-    }
+        } else {
+            info!("Split linear");
 
-    fn split(&mut self) {
-        let tensors = std::mem::take(&mut self.tensors);
-        for (name, tensor) in tensors {
-            let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
-                self.tensors.insert(name, tensor);
-                continue;
-            };
-            match &captures[2] {
-                "attn_qkv" => {
-                    let i: usize = captures[1].parse().unwrap();
-                    let (q, k, v) = split_qkv(&tensor);
-                    self.tensors
-                        .insert(format!("blk.{i}.attn_q.weight").into(), q);
-                    self.tensors
-                        .insert(format!("blk.{i}.attn_k.weight").into(), k);
-                    self.tensors
-                        .insert(format!("blk.{i}.attn_v.weight").into(), v);
-                }
-                "ffn_gate_up" => {
-                    let i: usize = captures[1].parse().unwrap();
-                    let (gate, up) = split_gate_up(&tensor);
-                    self.tensors
-                        .insert(format!("blk.{i}.ffn_gate.weight").into(), gate);
-                    self.tensors
-                        .insert(format!("blk.{i}.ffn_up.weight").into(), up);
-                }
-                _ => {
+            for (name, tensor) in tensors {
+                let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
                     self.tensors.insert(name, tensor);
+                    continue;
+                };
+                let i = &captures[1];
+                match &captures[2] {
+                    NAME_QKV => {
+                        let [q, k, v] = split_qkv(&tensor);
+                        self.tensors.insert(blk_tensor_name(i, NAME_Q), q);
+                        self.tensors.insert(blk_tensor_name(i, NAME_K), k);
+                        self.tensors.insert(blk_tensor_name(i, NAME_V), v);
+                    }
+                    NAME_GATE_UP => {
+                        let [gate, up] = split_gate_up(&tensor);
+                        self.tensors.insert(blk_tensor_name(i, NAME_GATE), gate);
+                        self.tensors.insert(blk_tensor_name(i, NAME_UP), up);
+                    }
+                    _ => {
+                        self.tensors.insert(name, tensor);
+                    }
                 }
             }
         }
     }
 }
 
-struct Blk<'a, const N: usize>([Option<Tensor<'a>>; N]);
+const NUM_QKV: usize = 3;
+const NUM_GATE_UP: usize = 2;
+const NAME_QKV: &str = "attn_qkv";
+const NAME_Q: &str = "attn_q";
+const NAME_K: &str = "attn_k";
+const NAME_V: &str = "attn_v";
+const NAME_GATE_UP: &str = "ffn_gate_up";
+const NAME_GATE: &str = "ffn_gate";
+const NAME_UP: &str = "ffn_up";
 
 struct MergeCollector<'a, const N: usize> {
-    buf: Vec<Blk<'a, N>>,
+    buf: Vec<[Option<Tensor<'a>>; N]>,
 }
 
-impl<'a> MergeCollector<'a, 3> {
+impl<'a, const N: usize> MergeCollector<'a, N> {
     fn new(blk: usize) -> Self {
         Self {
-            buf: (0..blk).map(|_| Blk([None, None, None])).collect(),
+            buf: (0..blk).map(|_| std::array::from_fn(|_| None)).collect(),
         }
     }
 
+    fn collect(
+        &mut self,
+        i: impl AsRef<str>,
+        tensor: Tensor<'a>,
+        k: usize,
+    ) -> Option<(usize, [Tensor<'a>; N])> {
+        let i: usize = i.as_ref().parse().unwrap();
+        self.buf[i][k] = Some(tensor);
+        if self.buf[i].iter().all(Option::is_some) {
+            Some((i, std::array::from_fn(|k| self.buf[i][k].take().unwrap())))
+        } else {
+            None
+        }
+    }
+}
+
+impl<'a> MergeCollector<'a, NUM_QKV> {
     fn put(
         &mut self,
         map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
         i: impl AsRef<str>,
         tensor: Tensor<'a>,
-        n: usize,
+        k: usize,
     ) {
-        let i: usize = i.as_ref().parse().unwrap();
-        self.buf[i].0[n] = Some(tensor);
-
-        let qkv = &mut self.buf[i];
-        if qkv.0.iter().any(Option::is_none) {
-            return;
+        if let Some((i, [q, k, v])) = self.collect(i, tensor, k) {
+            let qr = q.shape[1];
+            let kr = k.shape[1];
+            let vr = v.shape[1];
+            assert_eq!(qr % kr, 0);
+            assert!(qr >= kr);
+            assert_eq!(kr, vr);
+            map.insert(blk_tensor_name(i, NAME_QKV), concat1([q, k, v]));
         }
-
-        let q = qkv.0[0].take().unwrap();
-        let k = qkv.0[1].take().unwrap();
-        let v = qkv.0[2].take().unwrap();
-
-        let &[c, qr] = &*q.shape else {
-            panic!("invalid q shape: {:?}", q.shape);
-        };
-        let &[kc, kr] = &*k.shape else {
-            panic!("invalid k shape: {:?}", k.shape);
-        };
-        let &[vc, vr] = &*v.shape else {
-            panic!("invalid v shape: {:?}", v.shape);
-        };
-        assert_eq!(qr % kr, 0);
-        assert!(qr >= kr);
-        assert_eq!(kr, vr);
-        assert_eq!(kc, c);
-        assert_eq!(vc, c);
-
-        let ty = q.ty;
-        assert_eq!(k.ty, ty);
-        assert_eq!(v.ty, ty);
-
-        let r = qr + kr + vr;
-        let q = q.data;
-        let k = k.data;
-        let v = v.data;
-        map.insert(
-            format!("blk.{i}.attn_qkv.weight").into(),
-            Tensor {
-                ty,
-                shape: vec![c, r],
-                data: DataPromise::lazy(move || {
-                    let q = q.get();
-                    let k = k.get();
-                    let v = v.get();
-
-                    let len = q.len() + k.len() + v.len();
-                    assert_eq!(len, ty.size().elements_to_bytes(&[c, r]));
-
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    let (q_, tail) = dst.split_at_mut(q.len());
-                    let (k_, v_) = tail.split_at_mut(k.len());
-                    q_.copy_from_slice(q);
-                    k_.copy_from_slice(k);
-                    v_.copy_from_slice(v);
-                    dst
-                }),
-            },
-        );
     }
 }
 
-impl<'a> MergeCollector<'a, 2> {
-    fn new(blk: usize) -> Self {
-        Self {
-            buf: (0..blk).map(|_| Blk([None, None])).collect(),
-        }
-    }
-
+impl<'a> MergeCollector<'a, NUM_GATE_UP> {
     fn put(
         &mut self,
         map: &mut IndexMap<Cow<'a, str>, Tensor<'a>>,
         i: impl AsRef<str>,
         tensor: Tensor<'a>,
-        n: usize,
+        k: usize,
     ) {
-        let i: usize = i.as_ref().parse().unwrap();
-        self.buf[i].0[n] = Some(tensor);
-
-        let gate_up = &mut self.buf[i];
-        if gate_up.0.iter().any(Option::is_none) {
-            return;
+        if let Some((i, [gate, up])) = self.collect(i, tensor, k) {
+            assert_eq!(gate.shape[1], up.shape[1]);
+            map.insert(blk_tensor_name(i, NAME_GATE_UP), concat1([gate, up]));
         }
-
-        let gate = gate_up.0[0].take().unwrap();
-        let up = gate_up.0[1].take().unwrap();
-
-        let &[c, r] = &*gate.shape else {
-            panic!("invalid gate shape: {:?}", gate.shape);
-        };
-        let &[c_, r_] = &*up.shape else {
-            panic!("invalid up shape: {:?}", up.shape);
-        };
-        assert_eq!(r, r_);
-        assert_eq!(c, c_);
-
-        let ty = gate.ty;
-        assert_eq!(up.ty, ty);
-
-        let r = r * 2;
-        let gate = gate.data;
-        let up = up.data;
-        map.insert(
-            format!("blk.{i}.ffn_gate_up.weight").into(),
-            Tensor {
-                ty,
-                shape: vec![c, r],
-                data: DataPromise::lazy(move || {
-                    let gate = gate.get();
-                    let up = up.get();
-
-                    let len = gate.len() + up.len();
-                    assert_eq!(len, ty.size().elements_to_bytes(&[c, r]));
-
-                    let mut dst = MmapMut::map_anon(len).unwrap();
-                    let (gate_, up_) = dst.split_at_mut(gate.len());
-                    gate_.copy_from_slice(gate);
-                    up_.copy_from_slice(up);
-                    dst
-                }),
-            },
-        );
     }
 }
 
-fn split_qkv<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>, Tensor<'a>) {
-    let &[c, r] = &*tensor.shape else {
-        panic!("invalid tensor shape: {:?}", tensor.shape);
-    };
-
-    let ty = tensor.ty;
+fn split_qkv<'a>(tensor: &Tensor<'a>) -> [Tensor<'a>; NUM_QKV] {
+    let [c, r, _] = distruct(tensor);
     let rq = c;
     let rkv = (r - c) / 2;
-    let size = ty.size();
-    let dq = size.elements_to_bytes(&[c, rq]);
-    let dkv = size.elements_to_bytes(&[c, rkv]);
-    let q = {
-        let data = tensor.data.clone();
-        Tensor {
-            ty,
-            shape: vec![c, rq],
-            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[..dq])),
-        }
-    };
-    let k = {
-        let data = tensor.data.clone();
-        Tensor {
-            ty,
-            shape: vec![c, rkv],
-            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[dq..][..dkv])),
-        }
-    };
-    let v = {
-        let data = tensor.data.clone();
-        Tensor {
-            ty,
-            shape: vec![c, rkv],
-            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[dq + dkv..])),
-        }
-    };
-    (q, k, v)
+    split1(tensor, [rq, rkv, rkv])
 }
 
-fn split_gate_up<'a>(tensor: &Tensor<'a>) -> (Tensor<'a>, Tensor<'a>) {
-    let &[c, r] = &*tensor.shape else {
-        panic!("invalid tensor shape: {:?}", tensor.shape);
-    };
-
-    let ty = tensor.ty;
+fn split_gate_up<'a>(tensor: &Tensor<'a>) -> [Tensor<'a>; NUM_GATE_UP] {
+    let [_, r, _] = distruct(tensor);
     let r = r / 2;
-    let d = ty.size().elements_to_bytes(&[c, r]);
-    let gate = {
-        let data = tensor.data.clone();
-        Tensor {
-            ty,
-            shape: vec![c, r],
-            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[..d])),
-        }
-    };
-    let up = {
-        let data = tensor.data.clone();
-        Tensor {
-            ty,
-            shape: vec![c, r],
-            data: DataPromise::lazy(move || copy_to_mmap(&data.get()[d..])),
-        }
-    };
-    (gate, up)
+    split1(tensor, [r, r])
 }
 
-fn copy_to_mmap(data: &[u8]) -> MmapMut {
-    let mut dst = MmapMut::map_anon(data.len()).unwrap();
-    dst.copy_from_slice(data);
-    dst
+/// 解构形状，补充分布维度
+fn distruct(t: &Tensor) -> [u64; 3] {
+    match *t.shape {
+        [c, r] => [c, r, 1],
+        [c, r, n] => [c, r, n],
+        [..] => panic!("invalid tensor shape: {:?}", t.shape),
+    }
+}
+
+/// 构造形状，去除分布维度
+fn construct(c: u64, r: u64, n: u64) -> Vec<u64> {
+    if n == 1 {
+        vec![c, r]
+    } else {
+        vec![c, r, n]
+    }
+}
+
+/// 在最高维分割数据
+macro_rules! split0 {
+    ($s:expr; $d:expr; [$i: expr]) => {
+        $s[$d * $i..][..$d]
+    };
+}
+
+fn concat1<'a, const N: usize>(tensors: [Tensor<'a>; N]) -> Tensor<'a> {
+    // 提取数据类型和形状
+    let ty = tensors[0].ty;
+    let [c, mut r, n] = distruct(&tensors[0]);
+    for t in &tensors[1..] {
+        let [c_, r_, n_] = distruct(t);
+        assert_eq!(c, c_);
+        assert_eq!(n, n_);
+        r += r_;
+    }
+    // 锁定形状和数据
+    let r = r;
+    let data = tensors.map(|t| t.data);
+    // 生成张量
+    Tensor {
+        ty,
+        shape: construct(c, r, n),
+        data: DataPromise::lazy(move || {
+            let data: [_; N] = std::array::from_fn(|i| data[i].get());
+
+            let len = data.iter().map(|s| s.len()).sum();
+            assert_eq!(len, ty.size().elements_to_bytes(&[c, r, n]));
+
+            let n = n as usize;
+            let mut ans = MmapMut::map_anon(len).unwrap();
+            for i in 0..n {
+                let mut dst = &mut split0!(ans; len / n; [i]);
+                for data in data {
+                    let data = &split0!(data; data.len() / n; [i]);
+                    let (dst_, tail) = dst.split_at_mut(data.len());
+                    dst_.copy_from_slice(data);
+                    dst = tail;
+                }
+                assert!(dst.is_empty());
+            }
+            ans
+        }),
+    }
+}
+
+fn split1<'a, const N: usize>(tensor: &Tensor<'a>, split: [u64; N]) -> [Tensor<'a>; N] {
+    // 提取数据类型和形状
+    let ty = tensor.ty;
+    let [c, r, n] = distruct(tensor);
+    assert_eq!(r, split.iter().sum());
+    // 计算规模
+    let size = ty.size();
+    let d = size.elements_to_bytes(&[c, r]);
+    // 生成张量
+    let mut presum = 0;
+    split.map(|r_| {
+        let d_ = size.elements_to_bytes(&[c, r_]);
+        let data = tensor.data.clone();
+        let presum_ = presum;
+        presum += d_;
+        Tensor {
+            ty,
+            shape: construct(c, r_, n),
+            data: DataPromise::lazy(move || {
+                let n = n as usize;
+                let data = data.get();
+                assert_eq!(data.len(), d * n);
+
+                let mut ans = MmapMut::map_anon(d_ * n).unwrap();
+                for i in 0..n {
+                    let src = &split0!(data; d; [i]);
+                    let dst = &mut split0!(ans; d_; [i]);
+                    dst.copy_from_slice(&src[presum_..][..d_]);
+                }
+                ans
+            }),
+        }
+    })
 }

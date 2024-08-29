@@ -51,6 +51,7 @@ impl Content<'_> {
     }
 
     fn distribute_(&mut self, current: usize, target: usize) {
+        info!("Distributing model to {target} parts.");
         let m = current as u64;
         let n = target as u64;
         let distruct = move |shape: &[u64]| match *shape {
@@ -70,8 +71,6 @@ impl Content<'_> {
                 continue;
             };
             match &captures[2] {
-                "attn_qkv" => todo!(),
-                "ffn_gate_up" => todo!(),
                 "attn_q" | "attn_k" | "attn_v" | "ffn_up" | "ffn_gate" => {
                     let (c, r) = distruct(&v.shape);
                     assert_eq!(r * m % n, 0);
@@ -84,10 +83,9 @@ impl Content<'_> {
 
                     let size = v.ty.size();
                     let data = v.data.clone();
-                    v.data = DataPromise::lazy(move || {
-                        rearrange(data.get(), size, (c, r, m), (c * m / n, r, n))
-                    });
+                    v.data = DataPromise::lazy(move || rearrange(data.get(), size, c, r, m, n));
                 }
+                "attn_qkv" | "ffn_gate_up" => unreachable!(),
                 _ => {}
             }
         }
@@ -107,6 +105,7 @@ impl Content<'_> {
     }
 
     fn gather(&mut self, current: usize) {
+        info!("Gathering model to one part.");
         let n = current as u64;
         let distruct = move |shape: &[u64]| {
             let &[c, r, n_] = shape else { unreachable!() };
@@ -119,8 +118,6 @@ impl Content<'_> {
                 continue;
             };
             match &captures[2] {
-                "attn_qkv" => todo!(),
-                "ffn_gate_up" => todo!(),
                 "attn_q" | "attn_k" | "attn_v" | "ffn_up" | "ffn_gate" => {
                     let (c, r) = distruct(&v.shape);
                     v.shape = vec![c, r * n];
@@ -131,10 +128,9 @@ impl Content<'_> {
 
                     let size = v.ty.size();
                     let data = v.data.clone();
-                    v.data = DataPromise::lazy(move || {
-                        rearrange(data.get(), size, (c, r, n), (c * n, r, 1))
-                    });
+                    v.data = DataPromise::lazy(move || rearrange(data.get(), size, c, r, n, 1));
                 }
+                "attn_qkv" | "ffn_gate_up" => unreachable!(),
                 _ => {}
             }
         }
@@ -143,39 +139,31 @@ impl Content<'_> {
     }
 }
 
-fn rearrange(
-    data: &[u8],
-    size: GGmlTypeSize,
-    shape: (u64, u64, u64),
-    target: (u64, u64, u64),
-) -> MmapMut {
-    let (c, r, m) = shape;
-    let (c_, r_, n) = target;
+fn rearrange(data: &[u8], size: GGmlTypeSize, c: u64, r: u64, m: u64, n: u64) -> MmapMut {
     let len = size.elements_to_bytes(&[c, r, m]);
-
-    debug_assert_eq!(r, r_);
-    debug_assert_eq!(c * m, c_ * n);
     debug_assert_eq!(len, data.len());
 
     let r = r as usize;
-    let d = gcd(c, c_);
-    let md = (c / d) as usize;
-    let nd = (c_ / d) as usize;
-    let d = size.elements_to_bytes(&[d]);
-    let m = m as usize;
-    let n = n as usize;
-    // d md r m -> d nd r n
+    let d = gcd(c, c * m / n); // 元素/段
+    let n_src = (c / d) as usize; // 当前段/卡
+    let n_dst = (c * m / n / d) as usize; // 目标段/卡
+    let n = (c * m / d) as usize; // 段
+    let d = size.elements_to_bytes(&[d]); // 字节/段
 
     let mut ans = MmapMut::map_anon(data.len()).unwrap();
     let dst = ans.as_mut_ptr() as usize;
-    (0..len / d).into_par_iter().for_each(|i| {
-        let j = i / (md * m);
-        let i = i % (md * m);
-        let a = i / m * (md * r) + j * md + i % m;
-        let b = i / n * (nd * r) + j * nd + i % n;
+    (0..n * r).into_par_iter().for_each(|i| {
+        let j = i % r;
+        let i = i / r;
+        let c_src = i / n_src; // 当前卡号
+        let d_src = i % n_src; // 当前段号
+        let c_dst = i / n_dst; // 目标卡号
+        let d_dst = i % n_dst; // 目标段号
+        let i = (c_src * r + j) * n_src + d_src;
+        let j = (c_dst * r + j) * n_dst + d_dst;
 
-        let src = &data[d * a..][..d];
-        let dst = unsafe { from_raw_parts_mut((dst + d * b) as *mut u8, d) };
+        let src = &data[d * i..][..d];
+        let dst = unsafe { from_raw_parts_mut((dst + d * j) as *mut u8, d) };
         dst.copy_from_slice(src);
     });
     ans
