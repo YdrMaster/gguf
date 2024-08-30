@@ -1,6 +1,5 @@
 ﻿use super::{super::Tensor, blk_tensor_name, Content, DataPromise, BLK_TENSOR_REGEX};
 use ggus::{llm_block_count, DataFuture};
-use log::info;
 use memmap2::MmapMut;
 use std::borrow::Cow;
 
@@ -17,8 +16,6 @@ impl Content<'_> {
         self.assert_llama();
         let tensors = std::mem::take(&mut self.tensors);
         if ty {
-            info!("Merge linear");
-
             let blk = self
                 .meta_kvs
                 .get(&*llm_block_count("llama"))
@@ -46,8 +43,6 @@ impl Content<'_> {
                 }
             }
         } else {
-            info!("Split linear");
-
             for (name, tensor) in tensors {
                 let Some(captures) = BLK_TENSOR_REGEX.captures(&name) else {
                     self.tensors.insert(name, tensor);

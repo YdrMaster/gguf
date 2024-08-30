@@ -7,6 +7,7 @@ mod write;
 use file_info::FileInfo;
 use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufReader};
 use indexmap::IndexMap;
+use log::info;
 use memmap2::{Mmap, MmapMut};
 use std::{
     borrow::Cow,
@@ -14,6 +15,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::{Arc, LazyLock},
+    time::Instant,
 };
 
 pub(crate) use file_info::{show_file_info, MemSize};
@@ -48,9 +50,15 @@ pub(crate) fn operate<T: AsRef<Path>>(
 
     let mut content = Content::new(name, files.iter().map(|m| &**m)).map_err(OperateError::GGuf)?;
     for op in operations {
+        let name = op.to_string();
+        let time = Instant::now();
         content.apply(op);
+        info!("run step {name} in {:?}", time.elapsed());
     }
-    content.write_files(out).map_err(OperateError::Io)
+    let time = Instant::now();
+    let ans = content.write_files(out).map_err(OperateError::Io);
+    info!("write files in {:?}", time.elapsed());
+    ans
 }
 
 struct Content<'a> {

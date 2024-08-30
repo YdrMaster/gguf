@@ -1,7 +1,7 @@
 ﻿use super::{Content, DataPromise, Operator};
 use ggus::{DataFuture, GGmlType as Ty};
 use half::{bf16, f16};
-use log::info;
+use log::debug;
 use memmap2::MmapMut;
 use quantization::{QuantBlock, Q8_0};
 use std::alloc::Layout;
@@ -49,29 +49,30 @@ impl Content<'_> {
                 continue;
             }
 
-            info!("Casting tensor {name} from {from:?} to {to:?}");
+            debug!("Casting tensor {name} from {from:?} to {to:?}");
             tensor.ty = to;
 
             let data = tensor.data.clone();
-            tensor.data = DataPromise::lazy(move || cast(data.get(), from, to));
+            let row = tensor.shape[0];
+            tensor.data = DataPromise::lazy(move || cast(row as _, data.get(), from, to));
         }
     }
 }
 
 #[rustfmt::skip]
-fn cast(data: &[u8], from: Ty, to: Ty) -> MmapMut {
+fn cast(row: usize, data: &[u8], from: Ty, to: Ty) -> MmapMut {
     match (from, to) {
-        (Ty::F32 , Ty::F16 ) => from_f32 ::<f16 >(data),
-        (Ty::F32 , Ty::BF16) => from_f32 ::<bf16>(data),
-        (Ty::F32 , Ty::Q8_0) => from_f32 ::<Q8_0>(data),
+        (Ty::F32 , Ty::F16 ) => from_f32 ::<f16 >(data, row),
+        (Ty::F32 , Ty::BF16) => from_f32 ::<bf16>(data, row),
+        (Ty::F32 , Ty::Q8_0) => from_f32 ::<Q8_0>(data, row),
 
         (Ty::F16 , Ty::F32 ) =>   to_f32 ::<f16 >(data),
-        (Ty::F16 , Ty::BF16) => from_f16 ::<bf16>(data),
-        (Ty::F16 , Ty::Q8_0) => from_f16 ::<Q8_0>(data),
+        (Ty::F16 , Ty::BF16) => from_f16 ::<bf16>(data, row),
+        (Ty::F16 , Ty::Q8_0) => from_f16 ::<Q8_0>(data, row),
 
         (Ty::BF16, Ty::F32 ) =>   to_f32 ::<bf16>(data),
-        (Ty::BF16, Ty::F16 ) => from_bf16::<f16 >(data),
-        (Ty::BF16, Ty::Q8_0) => from_bf16::<Q8_0>(data),
+        (Ty::BF16, Ty::F16 ) => from_bf16::<f16 >(data, row),
+        (Ty::BF16, Ty::Q8_0) => from_bf16::<Q8_0>(data, row),
 
         (Ty::Q8_0, Ty::F32 ) =>   to_f32 ::<Q8_0>(data),
         (Ty::Q8_0, Ty::F16 ) =>   to_f16 ::<Q8_0>(data),
@@ -82,7 +83,8 @@ fn cast(data: &[u8], from: Ty, to: Ty) -> MmapMut {
     }
 }
 
-fn from_f32<T: QuantBlock>(data: &[u8]) -> MmapMut {
+fn from_f32<T: QuantBlock>(data: &[u8], row: usize) -> MmapMut {
+    assert!(T::arr_len(row).is_ok());
     let src = reslice::<f32>(data);
     let mut ans = malloc_quant::<T>(src.len());
     let dst = reslice_mut::<T>(&mut ans);
@@ -90,7 +92,8 @@ fn from_f32<T: QuantBlock>(data: &[u8]) -> MmapMut {
     ans
 }
 
-fn from_f16<T: QuantBlock>(data: &[u8]) -> MmapMut {
+fn from_f16<T: QuantBlock>(data: &[u8], row: usize) -> MmapMut {
+    assert!(T::arr_len(row).is_ok());
     let src = reslice::<f16>(data);
     let mut ans = malloc_quant::<T>(src.len());
     let dst = reslice_mut::<T>(&mut ans);
@@ -98,7 +101,8 @@ fn from_f16<T: QuantBlock>(data: &[u8]) -> MmapMut {
     ans
 }
 
-fn from_bf16<T: QuantBlock>(data: &[u8]) -> MmapMut {
+fn from_bf16<T: QuantBlock>(data: &[u8], row: usize) -> MmapMut {
+    assert!(T::arr_len(row).is_ok());
     let src = reslice::<bf16>(data);
     let mut ans = malloc_quant::<T>(src.len());
     let dst = reslice_mut::<T>(&mut ans);
