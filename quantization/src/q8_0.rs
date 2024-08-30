@@ -14,7 +14,7 @@ impl QuantBlock for Q8_0 {
     const BLOCK_SIZE: usize = BLOCK_SIZE;
 
     fn quantize(dst: &mut [Self], src: &[f32]) -> Result<(), QuantizeError> {
-        if Self::size_of_array(src.len())? != dst.len() {
+        if Self::arr_len(src.len())? != dst.len() {
             return Err(QuantizeError::LengthMismatch);
         }
         dst.into_par_iter().enumerate().for_each(|(i, y)| {
@@ -33,7 +33,7 @@ impl QuantBlock for Q8_0 {
     }
 
     fn dequantize(dst: &mut [f32], src: &[Self]) -> Result<(), QuantizeError> {
-        if Self::size_of_array(dst.len())? != src.len() {
+        if Self::arr_len(dst.len())? != src.len() {
             return Err(QuantizeError::LengthMismatch);
         }
         let dst = dst.as_mut_ptr() as usize;

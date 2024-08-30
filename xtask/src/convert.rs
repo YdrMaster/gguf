@@ -54,7 +54,7 @@ impl ConvertArgs {
                 op => match op.split_once(':') {
                     Some(("filter-meta", key)) => Operator::filter_meta_key(key),
                     Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),
-                    Some(("cast", dtype)) => Operator::cast(dtype),
+                    Some(("cast", dtype)) => Operator::quantize(dtype),
                     Some(("distribute", n)) => Operator::distribute(n),
                     _ => panic!("Unsupported operation: {op}"),
                 },

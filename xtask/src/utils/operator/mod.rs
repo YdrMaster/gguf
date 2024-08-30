@@ -1,6 +1,6 @@
-﻿mod cast;
-mod distribute;
+﻿mod distribute;
 mod merge;
+mod quantize;
 mod set_meta;
 mod sort;
 
@@ -12,7 +12,7 @@ use std::{borrow::Cow, collections::HashMap, fmt::Display, sync::LazyLock};
 pub(crate) enum Operator {
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
-    Cast(GGmlType),
+    Cast { w: GGmlType, a: GGmlType },
     MergeLinear(bool),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
     SortTensors,
@@ -37,7 +37,7 @@ impl Content<'_> {
         match op {
             FilterMetaKey(r) => self.meta_kvs.retain(|k, _| r.is_match(k)),
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
-            Cast(ty) => self.cast(ty),
+            Cast { w, a } => self.cast(w, a),
             MergeLinear(ty) => self.merge_linear(ty),
             SetMeta(map) => self.set_meta(map),
             SortTensors => self.sort_tensors(),
