@@ -3,11 +3,11 @@ use half::f16;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::{iter::zip, slice::from_raw_parts_mut};
 
+#[repr(C)]
 pub struct Q8_0 {
     delta: f16,
     quants: [i8; BLOCK_SIZE],
 }
-
 const BLOCK_SIZE: usize = 32;
 
 impl QuantBlock for Q8_0 {
