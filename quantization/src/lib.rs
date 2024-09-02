@@ -1,4 +1,7 @@
-﻿mod half;
+﻿use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use std::slice::{from_raw_parts, from_raw_parts_mut};
+
+mod half;
 mod q8_0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -7,39 +10,75 @@ pub enum QuantizeError {
     LengthMismatch,
 }
 
-pub trait QuantBlock: Sized {
-    const BLOCK_SIZE: usize;
+pub trait QuantBlock<T, const N: usize> {
+    fn quantize(data: &[T; N]) -> Self;
+    fn dequantize(&self) -> [T; N];
+}
 
-    fn arr_len(n: usize) -> Result<usize, QuantizeError> {
-        if n % Self::BLOCK_SIZE == 0 {
-            Ok(n / Self::BLOCK_SIZE)
-        } else {
-            Err(QuantizeError::Indivisible)
+impl<Blk, const N: usize> QuantBlock<f16, N> for Blk
+where
+    Blk: QuantBlock<f32, N>,
+{
+    #[inline]
+    fn quantize(data: &[f16; N]) -> Self {
+        Self::quantize(&data.map(f16::to_f32))
+    }
+    #[inline]
+    fn dequantize(&self) -> [f16; N] {
+        self.dequantize().map(f16::from_f32)
+    }
+}
+
+impl<Blk, const N: usize> QuantBlock<bf16, N> for Blk
+where
+    Blk: QuantBlock<f32, N>,
+{
+    #[inline]
+    fn quantize(data: &[bf16; N]) -> Self {
+        Self::quantize(&data.map(bf16::to_f32))
+    }
+    #[inline]
+    fn dequantize(&self) -> [bf16; N] {
+        self.dequantize().map(bf16::from_f32)
+    }
+}
+
+pub trait QuantExt<T, const N: usize>: Sized {
+    fn quantize_slice(dst: &mut [Self], src: &[T]) -> Result<(), QuantizeError>;
+    fn dequantize_slice(dst: &mut [T], src: &[Self]) -> Result<(), QuantizeError>;
+}
+
+impl<Blk, T, const N: usize> QuantExt<T, N> for Blk
+where
+    Blk: QuantBlock<T, N> + Sized + Send + Sync,
+    T: Send + Sync,
+{
+    fn quantize_slice(dst: &mut [Self], src: &[T]) -> Result<(), QuantizeError> {
+        if src.len() % N != 0 {
+            return Err(QuantizeError::Indivisible);
         }
-    }
-    fn quantize(dst: &mut [Self], src: &[f32]) -> Result<(), QuantizeError>;
-    fn dequantize(dst: &mut [f32], src: &[Self]) -> Result<(), QuantizeError>;
-
-    fn quantize_f16(dst: &mut [Self], src: &[f16]) -> Result<(), QuantizeError> {
-        let mut buf = vec![0.; src.len()];
-        f16::dequantize(&mut buf, src)?;
-        Self::quantize(dst, &buf)
-    }
-    fn dequantize_f16(dst: &mut [f16], src: &[Self]) -> Result<(), QuantizeError> {
-        let mut buf = vec![0.; src.len()];
-        Self::dequantize(&mut buf, src)?;
-        f16::quantize(dst, &buf)
+        if dst.len() != src.len() / N {
+            return Err(QuantizeError::LengthMismatch);
+        }
+        let src = unsafe { from_raw_parts(src.as_ptr().cast::<[T; N]>(), dst.len()) };
+        dst.into_par_iter()
+            .zip(src)
+            .for_each(|(dst, src)| *dst = Blk::quantize(src));
+        Ok(())
     }
 
-    fn quantize_bf16(dst: &mut [Self], src: &[bf16]) -> Result<(), QuantizeError> {
-        let mut buf = vec![0.; src.len()];
-        bf16::dequantize(&mut buf, src)?;
-        Self::quantize(dst, &buf)
-    }
-    fn dequantize_bf16(dst: &mut [bf16], src: &[Self]) -> Result<(), QuantizeError> {
-        let mut buf = vec![0.; src.len()];
-        Self::dequantize(&mut buf, src)?;
-        bf16::quantize(dst, &buf)
+    fn dequantize_slice(dst: &mut [T], src: &[Self]) -> Result<(), QuantizeError> {
+        if dst.len() % N != 0 {
+            return Err(QuantizeError::Indivisible);
+        }
+        if src.len() != dst.len() / N {
+            return Err(QuantizeError::LengthMismatch);
+        }
+        let dst = unsafe { from_raw_parts_mut(dst.as_mut_ptr().cast::<[T; N]>(), src.len()) };
+        src.into_par_iter()
+            .zip(dst)
+            .for_each(|(src, dst)| *dst = Blk::dequantize(src));
+        Ok(())
     }
 }
 
