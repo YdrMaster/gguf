@@ -10,7 +10,7 @@ quantization.path = "../quantization"
 indexmap.workspace = true
 rayon.workspace = true
 half.workspace = true
-itertools = "0.13.0"
+itertools = "0.13"
 memmap2 = "0.9"
 regex = "1.10"
 clap = { version = "4.5", features = ["derive"] }

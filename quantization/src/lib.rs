@@ -1,9 +1,6 @@
 ﻿use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
-mod half;
-mod q8_0;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum QuantizeError {
     Indivisible,
@@ -82,5 +79,19 @@ where
     }
 }
 
+mod half;
+mod q4_0;
+mod q4_1;
+mod q5_0;
+mod q5_1;
+mod q8_0;
+
+const _32: usize = 32;
+const _256: usize = 256;
+
 pub use ::half::{bf16, f16};
+pub use q4_0::Q4_0;
+pub use q4_1::Q4_1;
+pub use q5_0::Q5_0;
+pub use q5_1::Q5_1;
 pub use q8_0::Q8_0;

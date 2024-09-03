@@ -3,7 +3,7 @@ use ggus::{DataFuture, GGmlType as Ty};
 use half::{bf16, f16};
 use log::debug;
 use memmap2::MmapMut;
-use quantization::{QuantExt, Q8_0};
+use quantization::{QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0};
 use std::alloc::Layout;
 
 impl Operator {
@@ -16,6 +16,10 @@ impl Operator {
                 "16" | "f16" | "fp16" | "half" => Ty::F16,
                 "32" | "f32" | "fp32" | "float" => Ty::F32,
                 "bf16" => Ty::BF16,
+                "q4_0" => Ty::Q4_0,
+                "q4_1" => Ty::Q4_1,
+                "q5_0" => Ty::Q5_0,
+                "q5_1" => Ty::Q5_1,
                 "q8_0" => Ty::Q8_0,
                 _ => panic!("Unsupported type: {s}"),
             }
@@ -61,25 +65,41 @@ impl Content<'_> {
 
 #[rustfmt::skip]
 fn cast(row: usize, data: &[u8], from: Ty, to: Ty) -> MmapMut {
-    match (from, to) {
-        (Ty::F32 , Ty::F16 ) =>   quantize::<f16 , f32 ,  1>(data, row),
-        (Ty::F32 , Ty::BF16) =>   quantize::<bf16, f32 ,  1>(data, row),
-        (Ty::F32 , Ty::Q8_0) =>   quantize::<Q8_0, f32 , 32>(data, row),
-
-        (Ty::F16 , Ty::F32 ) => dequantize::<f16 , f32 ,  1>(data),
-        (Ty::F16 , Ty::BF16) =>   quantize::<bf16, f16 ,  1>(data, row),
-        (Ty::F16 , Ty::Q8_0) =>   quantize::<Q8_0, f16 , 32>(data, row),
-
-        (Ty::BF16, Ty::F32 ) => dequantize::<bf16, bf16,  1>(data),
-        (Ty::BF16, Ty::F16 ) =>   quantize::<f16 , bf16,  1>(data, row),
-        (Ty::BF16, Ty::Q8_0) =>   quantize::<Q8_0, bf16, 32>(data, row),
-
-        (Ty::Q8_0, Ty::F32 ) => dequantize::<Q8_0,  f32, 32>(data),
-        (Ty::Q8_0, Ty::F16 ) => dequantize::<Q8_0,  f16, 32>(data),
-        (Ty::Q8_0, Ty::BF16) => dequantize::<Q8_0, bf16, 32>(data),
-
-        (_, _) if from == to => unreachable!(),
-        (_, _) => todo!(),
+    match from {
+        Ty::F32 => match to {
+            Ty::F32      => unreachable!(),
+            Ty::F16      => quantize::<f16 , f32,  1>(data, row),
+            Ty::Q4_0     => quantize::<Q4_0, f32, 32>(data, row),
+            Ty::Q4_1     => quantize::<Q4_1, f32, 32>(data, row),
+            Ty::Q5_0     => quantize::<Q5_0, f32, 32>(data, row),
+            Ty::Q5_1     => quantize::<Q5_1, f32, 32>(data, row),
+            Ty::Q8_0     => quantize::<Q8_0, f32, 32>(data, row),
+            Ty::BF16     => quantize::<bf16, f32,  1>(data, row),
+            _ => todo!(),
+        },
+        Ty::F16 => match to {
+            Ty::F32      => dequantize::<f16 , f32,  1>(data),
+            Ty::F16      => unreachable!(),
+            Ty::Q4_0     =>   quantize::<Q4_0, f16, 32>(data, row),
+            Ty::Q4_1     =>   quantize::<Q4_1, f16, 32>(data, row),
+            Ty::Q5_0     =>   quantize::<Q5_0, f16, 32>(data, row),
+            Ty::Q5_1     =>   quantize::<Q5_1, f16, 32>(data, row),
+            Ty::Q8_0     =>   quantize::<Q8_0, f16, 32>(data, row),
+            Ty::BF16     =>   quantize::<bf16, f16,  1>(data, row),
+            _ => todo!(),
+        },
+        Ty::BF16 => match to {
+            Ty::F32      => dequantize::<bf16, f32 ,  1>(data),
+            Ty::F16      =>   quantize::<f16 , bf16,  1>(data, row),
+            Ty::Q4_0     =>   quantize::<Q4_0, bf16, 32>(data, row),
+            Ty::Q4_1     =>   quantize::<Q4_1, bf16, 32>(data, row),
+            Ty::Q5_0     =>   quantize::<Q5_0, bf16, 32>(data, row),
+            Ty::Q5_1     =>   quantize::<Q5_1, bf16, 32>(data, row),
+            Ty::Q8_0     =>   quantize::<Q8_0, bf16, 32>(data, row),
+            Ty::BF16     => unreachable!(),
+            _ => todo!(),
+        },
+        _ => cast(row, &cast(row, data, from, Ty::F32), Ty::F32, to),
     }
 }
 
