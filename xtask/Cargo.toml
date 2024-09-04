@@ -6,10 +6,9 @@ authors = ["YdrMaster <ydrml@hotmail.com>"]
 
 [dependencies]
 ggus.path = "../ggus"
-quantization.path = "../quantization"
+ggml-quants.path = "../ggml-quants"
 indexmap.workspace = true
 rayon.workspace = true
-half.workspace = true
 itertools = "0.13"
 memmap2 = "0.9"
 regex = "1.10"

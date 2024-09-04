@@ -1,24 +1,35 @@
-﻿use super::{QuantBlock, _32};
-use half::f16;
+﻿use super::{f16, max_by_abs, _32};
+use crate::{DataBlock, Quantize};
 use std::iter::zip;
 
 #[repr(C)]
 pub struct Q5_0 {
     delta: f16,
-    qh: [u8; 4],
+    qh: [u8; _32 / 8],
     ql: [u8; _32 / 2],
 }
 
-impl QuantBlock<f32, _32> for Q5_0 {
-    fn quantize(data: &[f32; _32]) -> Self {
-        let max = data
-            .iter()
-            .fold(0.0f32, |max, &x| if x.abs() > max.abs() { x } else { max });
+impl DataBlock for Q5_0 {
+    const COUNT: usize = _32;
+    const ZEROS: Self = Self {
+        delta: f16::ZERO,
+        qh: [0; _32 / 8],
+        ql: [0; _32 / 2],
+    };
+}
 
-        const D: f32 = (1 << (5 - 1)) as _;
-        let delta = max / -D;
-        let recip = if max == 0. { 0. } else { delta.recip() };
-        let f = |x: f32| ((x * recip + 16.5) as u8).min((1 << 5) - 1);
+impl Quantize<f32, _32> for Q5_0 {
+    fn quantize(data: &[f32; _32]) -> Self {
+        const { assert!(Self::COUNT == _32) }
+
+        let max = max_by_abs(data);
+        if max == 0. {
+            return Self::ZEROS;
+        }
+
+        let delta = max / -16.;
+        let recip = delta.recip();
+        let f = |x: f32| ((x * recip + 16.5) as u8).min(31);
 
         let (l, h) = data.split_at(_32 / 2);
         let mut qh = 0;

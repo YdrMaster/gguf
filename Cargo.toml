@@ -1,8 +1,7 @@
 [workspace]
-members = ["ggus", "meta-kv-macro", "quantization", "xtask"]
+members = ["ggus", "ggml-quants", "meta-kv-macro", "xtask"]
 resolver = "2"
 
 [workspace.dependencies]
 indexmap = "2.5"
 rayon = "1.10"
-half = "2.4"

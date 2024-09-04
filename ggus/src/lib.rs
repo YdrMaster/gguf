@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(warnings)]
 
+pub extern crate ggml_quants;
+
 mod file;
 mod header;
 mod metadata;

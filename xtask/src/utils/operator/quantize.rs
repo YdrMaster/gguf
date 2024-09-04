@@ -1,9 +1,8 @@
 ﻿use super::{Content, DataPromise, Operator};
+use ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0};
 use ggus::{DataFuture, GGmlType as Ty};
-use half::{bf16, f16};
 use log::debug;
 use memmap2::MmapMut;
-use quantization::{QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0};
 use std::alloc::Layout;
 
 impl Operator {

@@ -54,6 +54,22 @@ pub struct GGmlTypeSize {
 
 impl GGmlTypeSize {
     #[inline]
+    const fn unit<T>() -> Self {
+        Self {
+            block_size: 1,
+            type_size: size_of::<T>() as _,
+        }
+    }
+
+    #[inline]
+    const fn quants<T: ggml_quants::DataBlock>() -> Self {
+        Self {
+            block_size: T::COUNT as _,
+            type_size: size_of::<T>() as _,
+        }
+    }
+
+    #[inline]
     pub fn elements_to_bytes(&self, shape: &[u64]) -> usize {
         let blk = self.block_size as u64;
         let ele = self.type_size as u64;
@@ -71,51 +87,48 @@ impl GGmlTypeSize {
 }
 
 impl GGmlType {
+    #[rustfmt::skip]
     pub const fn size(self) -> GGmlTypeSize {
-        // See: GGML_QUANT_SIZES in <https://github.com/ggerganov/llama.cpp/blob/master/gguf-py/gguf/constants.py>
-        const QK_K: u32 = 256;
-        const fn unit<T>() -> (u32, u32) {
-            (1, size_of::<T>() as _)
+        macro_rules! size {
+            (t: $ty:ty) => { GGmlTypeSize::  unit::<$ty>() };
+            (q: $ty:ty) => { GGmlTypeSize::quants::<$ty>() };
         }
-        #[rustfmt::skip]
-        let (block_size, type_size) = match self {
-            Self::F32      => unit::<f32>(),
-            Self::F16      => unit::<u16>(),
-            Self::Q4_0     => ( 32, 2 + 16),
-            Self::Q4_1     => ( 32, 2 + 2 + 16),
-            Self::Q5_0     => ( 32, 2 + 4 + 16),
-            Self::Q5_1     => ( 32, 2 + 2 + 4 + 16),
-            Self::Q8_0     => ( 32, 2 + 32),
-            Self::Q8_1     => ( 32, 4 + 4 + 32),
-            Self::Q2K      => (256, 2 + 2 + QK_K / 16 + QK_K / 4),
-            Self::Q3K      => (256, 2 + QK_K / 4 + QK_K / 8 + 12),
-            Self::Q4K      => (256, 2 + 2 + QK_K / 2 + 12),
-            Self::Q5K      => (256, 2 + 2 + QK_K / 2 + QK_K / 8 + 12),
-            Self::Q6K      => (256, 2 + QK_K / 2 + QK_K / 4 + QK_K / 16),
-            Self::Q8K      => (256, 4 + QK_K + QK_K / 8),
-            Self::IQ2XXS   => (256, 2 + QK_K / 4),
-            Self::IQ2XS    => (256, 2 + QK_K / 4 + QK_K / 32),
-            Self::IQ3XXS   => (256, 2 + QK_K / 4 + QK_K / 8),
-            Self::IQ1S     => (256, 2 + QK_K / 8 + QK_K / 16),
-            Self::IQ4NL    => ( 32, 2 + 16),
-            Self::IQ3S     => (256, 2 + QK_K / 4 + QK_K / 8 + QK_K / 32 + 4),
-            Self::IQ2S     => (256, 2 + QK_K / 4 + QK_K / 16),
-            Self::IQ4XS    => (256, 2 + 2 + QK_K / 2 + QK_K / 64),
-            Self::I8       => unit::<i8 >(),
-            Self::I16      => unit::<i16>(),
-            Self::I32      => unit::<i32>(),
-            Self::I64      => unit::<i64>(),
-            Self::F64      => unit::<f64>(),
-            Self::IQ1M     => (256, QK_K / 8 + QK_K / 16  + QK_K / 32),
-            Self::BF16     => unit::<u16>(),
-            Self::Q4_0_4_4 => (32, 2 + 16),
-            Self::Q4_0_4_8 => (32, 2 + 16),
-            Self::Q4_0_8_8 => (32, 2 + 16),
+
+        use ggml_quants::*;
+        match self {
+            Self::F32      => size!(t: f32   ),
+            Self::F16      => size!(q: f16   ),
+            Self::Q4_0     => size!(q: Q4_0  ),
+            Self::Q4_1     => size!(q: Q4_1  ),
+            Self::Q5_0     => size!(q: Q5_0  ),
+            Self::Q5_1     => size!(q: Q5_1  ),
+            Self::Q8_0     => size!(q: Q8_0  ),
+            Self::Q8_1     => size!(q: Q8_1  ),
+            Self::Q2K      => size!(q: Q2K   ),
+            Self::Q3K      => size!(q: Q3K   ),
+            Self::Q4K      => size!(q: Q4K   ),
+            Self::Q5K      => size!(q: Q5K   ),
+            Self::Q6K      => size!(q: Q6K   ),
+            Self::Q8K      => size!(q: Q8K   ),
+            Self::IQ2XXS   => size!(q: IQ2XXS),
+            Self::IQ2XS    => size!(q: IQ2XS ),
+            Self::IQ3XXS   => size!(q: IQ3XXS),
+            Self::IQ1S     => size!(q: IQ1S  ),
+            Self::IQ4NL    => size!(q: IQ4NL ),
+            Self::IQ3S     => size!(q: IQ3S  ),
+            Self::IQ2S     => size!(q: IQ2S  ),
+            Self::IQ4XS    => size!(q: IQ4XS ),
+            Self::I8       => size!(t: i8    ),
+            Self::I16      => size!(t: i16   ),
+            Self::I32      => size!(t: i32   ),
+            Self::I64      => size!(t: i64   ),
+            Self::F64      => size!(t: f64   ),
+            Self::IQ1M     => size!(q: IQ1M  ),
+            Self::BF16     => size!(q: bf16   ),
+            Self::Q4_0_4_4 |
+            Self::Q4_0_4_8 |
+            Self::Q4_0_8_8 => todo!(),
             _              => unimplemented!(),
-        };
-        GGmlTypeSize {
-            block_size,
-            type_size,
         }
     }
 }

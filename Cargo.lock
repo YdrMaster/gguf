@@ -201,10 +201,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "ggml-quants"
+version = "0.0.0"
+dependencies = [
+ "half",
+ "rayon",
+]
+
+[[package]]
 name = "ggus"
 version = "0.2.0"
 dependencies = [
  "fancy-regex",
+ "ggml-quants",
  "indexmap",
  "meta-kv-macro",
 ]
@@ -327,14 +336,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e719e8df665df0d1c8fbfd238015744736151d4445ec0836b8e628aae103b77"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "quantization"
-version = "0.1.0"
-dependencies = [
- "half",
- "rayon",
 ]
 
 [[package]]
@@ -633,13 +634,12 @@ name = "xtask"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "ggml-quants",
  "ggus",
- "half",
  "indexmap",
  "itertools",
  "log",
  "memmap2",
- "quantization",
  "rayon",
  "regex",
  "simple_logger",

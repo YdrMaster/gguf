@@ -1,25 +1,39 @@
-﻿use super::{QuantBlock, _32};
-use half::f16;
+﻿use super::{min_max, DeltaMin, _32};
+use crate::{DataBlock, Quantize};
 use std::iter::zip;
 
 #[repr(C)]
 pub struct Q5_1 {
-    delta: f16,
-    min: f16,
-    qh: [u8; 4],
+    delta_min: DeltaMin,
+    qh: [u8; _32 / 8],
     ql: [u8; _32 / 2],
 }
 
-impl QuantBlock<f32, _32> for Q5_1 {
-    fn quantize(data: &[f32; _32]) -> Self {
-        let (min, max) = data.iter().fold((f32::MAX, f32::MIN), |(min, max), &x| {
-            (min.min(x), max.max(x))
-        });
+impl DataBlock for Q5_1 {
+    const COUNT: usize = _32;
+    const ZEROS: Self = Self {
+        delta_min: DeltaMin::ZERO,
+        qh: [0; _32 / 8],
+        ql: [0; _32 / 2],
+    };
+}
 
-        const D: f32 = ((1 << 5) - 1) as _;
-        let delta = (max - min) / D;
-        let recip = if delta == 0. { 0. } else { delta.recip() };
-        let f = |x| (((x - min) * recip + 0.5) as u8).min((1 << 5) - 1);
+impl Quantize<f32, _32> for Q5_1 {
+    fn quantize(data: &[f32; _32]) -> Self {
+        const { assert!(Self::COUNT == _32) }
+
+        let (min, max) = min_max(data);
+        if min == max {
+            return Self {
+                delta_min: DeltaMin::no_delta(min),
+                qh: [0; _32 / 8],
+                ql: [0; _32 / 2],
+            };
+        }
+
+        let delta = (max - min) / ((1 << 5) - 1) as f32;
+        let recip = delta.recip();
+        let f = |x| (((x - min) * recip + 0.5) as u8).min(31);
 
         let (l, h) = data.split_at(_32 / 2);
         let mut qh = 0;
@@ -33,16 +47,14 @@ impl QuantBlock<f32, _32> for Q5_1 {
         }
 
         Self {
-            delta: f16::from_f32(delta),
-            min: f16::from_f32(min),
+            delta_min: DeltaMin::new(delta, min),
             qh: qh.to_le_bytes(),
             ql,
         }
     }
 
     fn dequantize(&self) -> [f32; _32] {
-        let delta = self.delta.to_f32();
-        let min = self.min.to_f32();
+        let (delta, min) = self.delta_min.to_f32();
         let qh = u32::from_le_bytes(self.qh);
         let f = |l, h| ((l | (h as u8 & 0x10)) - 16) as f32 * delta + min;
 

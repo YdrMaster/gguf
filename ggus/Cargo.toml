@@ -12,6 +12,7 @@ keywords = ["gguf", "ggml", "llama-cpp"]
 categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]
+ggml-quants = { version = "0.0", path = "../ggml-quants" }
+meta-kv-macro = { version = "0.0", path = "../meta-kv-macro" }
 indexmap.workspace = true
-fancy-regex = "0.13.0"
-meta-kv-macro = { path = "../meta-kv-macro" }
+fancy-regex = "0.13"

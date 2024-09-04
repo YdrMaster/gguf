@@ -1,4 +1,5 @@
-﻿use super::{QuantBlock, _32};
+﻿use super::{max_abs, _32};
+use crate::{DataBlock, Quantize};
 use half::f16;
 
 #[repr(C)]
@@ -7,11 +8,25 @@ pub struct Q8_0 {
     quants: [i8; _32],
 }
 
-impl QuantBlock<f32, _32> for Q8_0 {
+impl DataBlock for Q8_0 {
+    const COUNT: usize = _32;
+    const ZEROS: Self = Self {
+        delta: f16::ZERO,
+        quants: [0; _32],
+    };
+}
+
+impl Quantize<f32, _32> for Q8_0 {
     fn quantize(data: &[f32; _32]) -> Self {
-        let amax = data.iter().fold(0., |acc, x| x.abs().max(acc));
+        const { assert!(Self::COUNT == _32) }
+
+        let amax = max_abs(data);
+        if amax == 0. {
+            return Self::ZEROS;
+        }
+
         let delta = amax / i8::MAX as f32;
-        let recip = if delta == 0. { 0. } else { delta.recip() };
+        let recip = delta.recip();
         Self {
             delta: f16::from_f32(delta),
             quants: data.map(|x| (x * recip).round() as _),
