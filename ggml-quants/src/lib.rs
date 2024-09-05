@@ -84,5 +84,8 @@ where
     }
 }
 
-mod types;
-pub use types::*;
+mod structs;
+pub use structs::*;
+
+#[cfg(feature = "types")]
+pub mod types;

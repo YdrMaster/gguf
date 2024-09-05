@@ -16,3 +16,7 @@ ggml-quants = { version = "0.0", path = "../ggml-quants" }
 meta-kv-macro = { version = "0.0", path = "../meta-kv-macro" }
 indexmap.workspace = true
 fancy-regex = "0.13"
+
+[features]
+default = ["quant-types"]
+quant-types = ["ggml-quants/types"]
