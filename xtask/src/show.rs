@@ -228,12 +228,13 @@ fn show_tensors(reader: &mut GGufReader, count: usize, filter: &Regex) -> Result
         }
     }
 
+    name_width += 1;
     if !tensors.is_empty() {
         show_title("Tensors");
         for (name, info) in tensors {
+            let ty = format!("{:?}", info.ty());
             println!(
-                "{YES}{name:·<name_width$} {:?} +{:<#0off_width$x} {:?}",
-                info.ty(),
+                "{YES}{name:·<name_width$}{ty:·>6} +{:<#0off_width$x} {:?}",
                 info.offset(),
                 info.shape(),
             );
