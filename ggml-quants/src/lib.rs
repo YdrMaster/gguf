@@ -88,4 +88,7 @@ mod structs;
 pub use structs::*;
 
 #[cfg(feature = "types")]
+pub extern crate digit_layout;
+
+#[cfg(feature = "types")]
 pub mod types;
