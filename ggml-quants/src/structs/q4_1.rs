@@ -9,6 +9,8 @@ pub struct Q4_1 {
 }
 
 impl DataBlock for Q4_1 {
+    #[cfg(feature = "types")]
+    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
     const COUNT: usize = _32;
     const ZEROS: Self = Self {
         delta_min: DeltaMin::ZERO,
@@ -18,6 +20,7 @@ impl DataBlock for Q4_1 {
 
 impl Quantize<f32, _32> for Q4_1 {
     fn quantize(data: &[f32; _32]) -> Self {
+        #[allow(clippy::assertions_on_constants)]
         const { assert!(Self::COUNT == _32) }
 
         let (min, max) = min_max(data);

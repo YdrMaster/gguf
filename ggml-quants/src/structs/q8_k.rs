@@ -11,6 +11,8 @@ pub struct Q8K {
 }
 
 impl DataBlock for Q8K {
+    #[cfg(feature = "types")]
+    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
     const COUNT: usize = _256;
     const ZEROS: Self = Self {
         delta: f16::ZERO,
@@ -21,6 +23,7 @@ impl DataBlock for Q8K {
 
 impl Quantize<f32, _256> for Q8K {
     fn quantize(data: &[f32; _256]) -> Self {
+        #[allow(clippy::assertions_on_constants)]
         const { assert!(Self::COUNT == _256) }
 
         let max = max_by_abs(data);

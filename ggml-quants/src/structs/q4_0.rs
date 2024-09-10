@@ -9,6 +9,8 @@ pub struct Q4_0 {
 }
 
 impl DataBlock for Q4_0 {
+    #[cfg(feature = "types")]
+    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
     const COUNT: usize = _32;
     const ZEROS: Self = Self {
         delta: f16::ZERO,
@@ -18,6 +20,7 @@ impl DataBlock for Q4_0 {
 
 impl Quantize<f32, _32> for Q4_0 {
     fn quantize(data: &[f32; _32]) -> Self {
+        #[allow(clippy::assertions_on_constants)]
         const { assert!(Self::COUNT == _32) }
 
         let max = max_by_abs(data);

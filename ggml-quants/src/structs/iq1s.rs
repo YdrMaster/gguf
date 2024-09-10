@@ -9,6 +9,8 @@ pub struct IQ1S {
 }
 
 impl DataBlock for IQ1S {
+    #[cfg(feature = "types")]
+    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
     const COUNT: usize = _256;
     const ZEROS: Self = Self {
         delta: f16::ZERO,
