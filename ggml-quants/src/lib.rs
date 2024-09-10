@@ -6,6 +6,28 @@ pub trait DataBlock: Sized + 'static {
     const ZEROS: Self;
 }
 
+macro_rules! impl_data_block {
+    ($ty:ty, $zero:expr) => {
+        impl DataBlock for $ty {
+            const COUNT: usize = 1;
+            const ZEROS: Self = $zero;
+        }
+    };
+}
+
+impl_data_block!(u8, 0);
+impl_data_block!(i8, 0);
+impl_data_block!(u16, 0);
+impl_data_block!(i16, 0);
+impl_data_block!(u32, 0);
+impl_data_block!(i32, 0);
+impl_data_block!(f32, 0.);
+impl_data_block!(u64, 0);
+impl_data_block!(i64, 0);
+impl_data_block!(f64, 0.);
+impl_data_block!(u128, 0);
+impl_data_block!(i128, 0);
+
 pub trait Quantize<T, const N: usize>: DataBlock {
     fn quantize(data: &[T; N]) -> Self;
     fn dequantize(&self) -> [T; N];

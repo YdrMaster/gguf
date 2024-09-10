@@ -179,9 +179,9 @@ dependencies = [
 
 [[package]]
 name = "digit-layout"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd186297369f69f63af87d9d40e5f4ddb0874f73d8b28ab1d5b35162c804f1fe"
+checksum = "9644d23c4c76d468e14cd4f7aa39879a7a9e6c979489b7eb33915e78c7a5d4dc"
 dependencies = [
  "half",
 ]
