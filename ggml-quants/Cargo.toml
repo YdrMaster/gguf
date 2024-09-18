@@ -8,6 +8,7 @@ authors = ["YdrMaster <ydrml@hotmail.com>"]
 rayon.workspace = true
 digit-layout = { version = "0.1", optional = true }
 half = "2.4"
+itertools = "0.13.0"
 
 [features]
 default = ["types"]
