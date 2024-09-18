@@ -131,6 +131,45 @@ impl GGmlType {
             _              => unimplemented!(),
         }
     }
+
+    #[cfg(feature = "types")]
+    pub const fn to_digit_layout(self) -> ggml_quants::digit_layout::DigitLayout {
+        use ggml_quants::{digit_layout::types as primitive, types as quantized};
+        #[rustfmt::skip]
+        let ans = match self {
+            Self::F32    => primitive::F32   ,
+            Self::F16    => primitive::F16   ,
+            Self::BF16   => primitive::BF16  ,
+            Self::Q8_0   => quantized::Q8_0  ,
+            Self::Q8_1   => quantized::Q8_1  ,
+            Self::Q4_0   => quantized::Q4_0  ,
+            Self::Q4_1   => quantized::Q4_1  ,
+            Self::Q5_0   => quantized::Q5_0  ,
+            Self::Q5_1   => quantized::Q5_1  ,
+            Self::Q2K    => quantized::Q2K   ,
+            Self::Q3K    => quantized::Q3K   ,
+            Self::Q4K    => quantized::Q4K   ,
+            Self::Q5K    => quantized::Q5K   ,
+            Self::Q6K    => quantized::Q6K   ,
+            Self::Q8K    => quantized::Q8K   ,
+            Self::IQ2XXS => quantized::IQ2XXS,
+            Self::IQ2XS  => quantized::IQ2XS ,
+            Self::IQ3XXS => quantized::IQ3XXS,
+            Self::IQ1S   => quantized::IQ1S  ,
+            Self::IQ4NL  => quantized::IQ4NL ,
+            Self::IQ3S   => quantized::IQ3S  ,
+            Self::IQ2S   => quantized::IQ2S  ,
+            Self::IQ4XS  => quantized::IQ4XS ,
+            Self::IQ1M   => quantized::IQ1M  ,
+            Self::I8     => primitive::I8    ,
+            Self::I16    => primitive::I16   ,
+            Self::I32    => primitive::I32   ,
+            Self::I64    => primitive::I64   ,
+            Self::F64    => primitive::F64   ,
+            _            => todo!()          ,
+        };
+        ans
+    }
 }
 
 #[repr(transparent)]

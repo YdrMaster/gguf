@@ -18,5 +18,5 @@ fancy-regex = "0.13"
 num_enum = "0.7"
 
 [features]
-default = ["quant-types"]
-quant-types = ["ggml-quants/types"]
+default = ["types"]
+types = ["ggml-quants/types"]
