@@ -24,7 +24,9 @@ impl DataBlock for Q8K {
 impl Quantize<f32, _256> for Q8K {
     fn quantize(data: &[f32; _256]) -> Self {
         #[allow(clippy::assertions_on_constants)]
-        const { assert!(Self::COUNT == _256) }
+        const {
+            assert!(Self::COUNT == _256)
+        }
 
         let max = max_by_abs(data);
         if max == 0. {
@@ -37,7 +39,7 @@ impl Quantize<f32, _256> for Q8K {
         let mut quants = [0; _256];
         let mut sums = [0; _256 / 16];
         for (i, (y, &x)) in zip(&mut quants, data).enumerate() {
-            *y = ((x * recip).round() as i8).min(127);
+            *y = (x * recip).round().min(127.) as i8;
             sums[i / 16] += *y as i16;
         }
 

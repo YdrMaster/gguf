@@ -2,7 +2,7 @@
     super::{DataPromise, MetaValue},
     Content, Operator, BLK_TENSOR_REGEX,
 };
-use ggus::{DataFuture, GGmlTypeSize, GGufMetaDataValueType};
+use ggus::{DataFuture, GGmlTypeSize, GGufMetaDataValueType, GGufMetaMapExt};
 use log::{info, warn};
 use memmap2::MmapMut;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -21,10 +21,12 @@ const META_VAL: fn(n: usize) -> Cow<'static, [u8]> = |n| (n as u32).to_le_bytes(
 
 impl Content<'_> {
     pub(super) fn distribute_meta(&self) -> usize {
-        self.meta_kvs.get(&META_KEY(self.arch())).map_or(1, |val| {
-            assert_eq!(val.ty, META_TY);
-            val.value_reader().read::<u32>().unwrap() as _
-        })
+        self.meta_kvs
+            .get(&META_KEY(self.general_architecture().unwrap()))
+            .map_or(1, |val| {
+                assert_eq!(val.ty, META_TY);
+                val.value_reader().read::<u32>().unwrap() as _
+            })
     }
 
     pub(super) fn distribute(&mut self, n: usize) {
@@ -91,7 +93,10 @@ impl Content<'_> {
         }
 
         use indexmap::map::Entry::{Occupied, Vacant};
-        match self.meta_kvs.entry(META_KEY(self.arch())) {
+        match self
+            .meta_kvs
+            .entry(META_KEY(self.general_architecture().unwrap()))
+        {
             Occupied(mut entry) => {
                 entry.get_mut().value = META_VAL(n as _);
             }
@@ -135,7 +140,8 @@ impl Content<'_> {
             }
         }
 
-        self.meta_kvs.shift_remove(&META_KEY(self.arch()));
+        self.meta_kvs
+            .shift_remove(&META_KEY(self.general_architecture().unwrap()));
     }
 }
 

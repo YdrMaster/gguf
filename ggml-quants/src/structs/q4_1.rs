@@ -1,4 +1,4 @@
-﻿use super::{min_max, DeltaMin, _32};
+use super::{min_max, DeltaMin, _32};
 use crate::{DataBlock, Quantize};
 use std::array::from_fn;
 
@@ -21,7 +21,9 @@ impl DataBlock for Q4_1 {
 impl Quantize<f32, _32> for Q4_1 {
     fn quantize(data: &[f32; _32]) -> Self {
         #[allow(clippy::assertions_on_constants)]
-        const { assert!(Self::COUNT == _32) }
+        const {
+            assert!(Self::COUNT == _32)
+        }
 
         let (min, max) = min_max(data);
         if min == max {

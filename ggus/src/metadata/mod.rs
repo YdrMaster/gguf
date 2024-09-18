@@ -1,9 +1,13 @@
 //! See <https://github.com/ggerganov/ggml/blob/master/docs/gguf.md#standardized-key-value-pairs>.
 
+mod collection;
 mod meta_kv;
-pub(crate) mod standard;
 
-pub use meta_kv::GGufMetaKV;
+pub use collection::{GGufMetaError, GGufMetaMap, GGufMetaMapExt};
+pub use meta_kv::{GGufMetaKV, GGufMetaValueArray};
+
+pub const DEFAULT_ALIGNMENT: usize = 32;
+pub const GENERAL_ALIGNMENT: &str = "general.alignment";
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
@@ -61,7 +65,7 @@ impl GGufMetaDataValueType {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(num_enum::TryFromPrimitive, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[repr(u32)]
 pub enum GGufFileType {
     AllF32 = 0,
@@ -103,54 +107,6 @@ pub enum GGufFileType {
     MostlyQ4_0_4_8 = 34,
     MostlyQ4_0_8_8 = 35,
     // GUESSED = 1024  # not specified in the model file
-}
-
-impl GGufFileType {
-    #[rustfmt::skip]
-    pub fn to_ggml_type(self) -> crate::GGmlType {
-        type Ty = crate::GGmlType;
-        match self {
-            Self::AllF32         => Ty::F32,
-            Self::MostlyF16      => Ty::F16,
-            Self::MostlyQ4_0     => Ty::Q4_0,
-            Self::MostlyQ4_1     => Ty::Q4_1,
-            #[allow(deprecated)]
-            Self::MostlyQ4_2     => Ty::Q4_2,
-            #[allow(deprecated)]
-            Self::MostlyQ4_3     => Ty::Q4_3,
-            Self::MostlyQ8_0     => Ty::Q8_0,
-            Self::MostlyQ5_0     => Ty::Q5_0,
-            Self::MostlyQ51      => Ty::Q5_1,
-            Self::MostlyQ2K      => Ty::Q2K,
-            Self::MostlyQ6K      => Ty::Q6K,
-            Self::MostlyIQ2XXS   => Ty::IQ2XXS,
-            Self::MostlyIQ2XS    => Ty::IQ2XS,
-            Self::MostlyIQ3XXS   => Ty::IQ3XXS,
-            Self::MostlyIQ1S     => Ty::IQ1S,
-            Self::MostlyIQ4NL    => Ty::IQ4NL,
-            Self::MostlyIQ3S     => Ty::IQ3S,
-            Self::MostlyIQ2S     => Ty::IQ2S,
-            Self::MostlyIQ4XS    => Ty::IQ4XS,
-            Self::MostlyIQ1M     => Ty::IQ1M,
-            Self::MostlyBF16     => Ty::BF16,
-            Self::MostlyQ4_0_4_4 => Ty::Q4_0_4_4,
-            Self::MostlyQ4_0_4_8 => Ty::Q4_0_4_8,
-            Self::MostlyQ4_0_8_8 => Ty::Q4_0_8_8,
-
-            Self::MostlyQ4_1SomeF16 |
-            Self::MostlyQ3KS        |
-            Self::MostlyQ3KM        |
-            Self::MostlyQ3KL        |
-            Self::MostlyQ4KS        |
-            Self::MostlyQ4KM        |
-            Self::MostlyQ5KS        |
-            Self::MostlyQ5KM        |
-            Self::MostlyQ2KS        |
-            Self::MostlyIQ3XS       |
-            Self::MostlyIQ3M        |
-            Self::MostlyIQ2M => todo!(),
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

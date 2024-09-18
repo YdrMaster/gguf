@@ -1,6 +1,8 @@
 ﻿use super::GGufMetaDataValueType as Ty;
 use crate::{GGufReadError, GGufReader};
+use std::marker::PhantomData;
 
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct GGufMetaKV<'a>(&'a [u8]);
 
@@ -125,5 +127,55 @@ impl<'a> GGufMetaKV<'a> {
     #[inline]
     fn reader(&self) -> GGufReader<'a> {
         GGufReader::new(self.0)
+    }
+}
+
+pub struct GGufMetaValueArray<'a, T: ?Sized> {
+    reader: GGufReader<'a>,
+    len: usize,
+    _phantom: PhantomData<T>,
+}
+
+impl<'a, T: ?Sized> GGufMetaValueArray<'a, T> {
+    pub fn new(reader: GGufReader<'a>, len: usize) -> Self {
+        Self {
+            reader,
+            len,
+            _phantom: PhantomData,
+        }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl<'a> Iterator for GGufMetaValueArray<'a, str> {
+    type Item = Result<&'a str, GGufReadError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            self.len -= 1;
+            Some(self.reader.read_str())
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: Copy> Iterator for GGufMetaValueArray<'_, T> {
+    type Item = Result<T, GGufReadError>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            self.len -= 1;
+            Some(self.reader.read())
+        } else {
+            None
+        }
     }
 }

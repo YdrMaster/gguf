@@ -1,6 +1,6 @@
 ﻿use crate::{
-    pad, GGufFileHeader, GGufMetaKV, GGufReadError, GGufReader, GGufTensorMeta, DEFAULT_ALIGNMENT,
-    GENERAL_ALIGNMENT,
+    pad, GGufFileHeader, GGufMetaDataValueType, GGufMetaKV, GGufMetaMap, GGufReadError, GGufReader,
+    GGufTensorMeta, DEFAULT_ALIGNMENT, GENERAL_ALIGNMENT,
 };
 use indexmap::IndexMap;
 use std::{error::Error, fmt};
@@ -19,6 +19,7 @@ pub enum GGufError {
     MagicMismatch,
     EndianNotSupport,
     VersionNotSupport,
+    AlignmentTypeMismatch(GGufMetaDataValueType),
     DuplicateMetaKey(String),
     DuplicateTensorName(String),
 }
@@ -30,6 +31,7 @@ impl fmt::Display for GGufError {
             Self::MagicMismatch => f.write_str("magic mismatch"),
             Self::EndianNotSupport => f.write_str("endian not support"),
             Self::VersionNotSupport => f.write_str("version not support"),
+            Self::AlignmentTypeMismatch(ty) => write!(f, "alignment type mismatch: {ty:?}"),
             Self::DuplicateMetaKey(key) => write!(f, "duplicate meta key: {key}"),
             Self::DuplicateTensorName(name) => write!(f, "duplicate tensor name: {name}"),
         }
@@ -37,6 +39,12 @@ impl fmt::Display for GGufError {
 }
 
 impl Error for GGufError {}
+
+impl GGufMetaMap for GGuf<'_> {
+    fn get(&self, key: &str) -> Option<(GGufMetaDataValueType, &[u8])> {
+        self.meta_kvs.get(key).map(|kv| (kv.ty(), kv.value_bytes()))
+    }
+}
 
 impl<'a> GGuf<'a> {
     pub fn new(data: &'a [u8]) -> Result<Self, GGufError> {
@@ -61,10 +69,12 @@ impl<'a> GGuf<'a> {
             let kv = reader.read_meta_kv().map_err(Reading)?;
             let k = kv.key();
             if k == GENERAL_ALIGNMENT {
-                alignment = kv
-                    .value_reader()
-                    .read_general_alignment_val()
-                    .map_err(Reading)? as _;
+                type Ty = GGufMetaDataValueType;
+                alignment = match kv.ty() {
+                    Ty::U32 => kv.value_reader().read::<u32>().map_err(Reading)? as _,
+                    Ty::U64 => kv.value_reader().read::<u64>().map_err(Reading)? as _,
+                    ty => return Err(AlignmentTypeMismatch(ty)),
+                }
             }
             if meta_kvs.insert(k, kv).is_some() {
                 return Err(DuplicateMetaKey(k.into()));

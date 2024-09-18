@@ -1,4 +1,4 @@
-﻿use super::{bf16, f16, _1};
+use super::{bf16, f16, _1};
 use crate::{DataBlock, Quantize};
 
 impl DataBlock for f16 {
@@ -12,7 +12,9 @@ impl Quantize<f32, _1> for f16 {
     #[inline]
     fn quantize(&[data]: &[f32; _1]) -> Self {
         #[allow(clippy::assertions_on_constants)]
-        const { assert!(Self::COUNT == _1) }
+        const {
+            assert!(Self::COUNT == _1)
+        }
         f16::from_f32(data)
     }
     #[inline]
@@ -32,7 +34,9 @@ impl Quantize<f32, _1> for bf16 {
     #[inline]
     fn quantize(&[data]: &[f32; _1]) -> Self {
         #[allow(clippy::assertions_on_constants)]
-        const { assert!(Self::COUNT == _1) }
+        const {
+            assert!(Self::COUNT == _1)
+        }
         bf16::from_f32(data)
     }
     #[inline]

@@ -38,7 +38,7 @@ impl<'a> GGufReader<'a> {
         self.skip::<u8>(len as _)
     }
 
-    pub fn read<T: Copy + 'static>(&mut self) -> Result<T, GGufReadError> {
+    pub fn read<T: Copy>(&mut self) -> Result<T, GGufReadError> {
         let ptr = self.0.as_ptr().cast::<T>();
         self.skip::<T>(1)?;
         Ok(unsafe { ptr.read_unaligned() })

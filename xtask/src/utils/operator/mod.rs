@@ -5,7 +5,7 @@ mod set_meta;
 mod sort;
 
 use super::{compile_patterns, Content, DataPromise};
-use ggus::{GGmlType, GGufMetaDataValueType, GENERAL_ARCHITECTURE};
+use ggus::{GGmlType, GGufMetaDataValueType, GGufMetaMapExt};
 use regex::Regex;
 use std::{
     borrow::Cow,
@@ -90,19 +90,8 @@ impl Content<'_> {
         }
     }
 
-    fn arch(&self) -> &str {
-        self.meta_kvs
-            .get(GENERAL_ARCHITECTURE)
-            .map(|v| {
-                assert_eq!(v.ty, GGufMetaDataValueType::String);
-                v.value_reader().read_general_architecture_val()
-            })
-            .expect("missing architecture")
-            .unwrap_or_else(|e| panic!("failed to read architecture: {e:?}"))
-    }
-
     fn assert_llama(&self) {
-        match self.arch() {
+        match self.general_architecture().unwrap() {
             "llama" => {}
             arch => todo!("unsupported architecture: {arch}"),
         }

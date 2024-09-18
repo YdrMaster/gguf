@@ -1,4 +1,4 @@
-﻿use super::{max_abs, _32};
+use super::{max_abs, _32};
 use crate::{DataBlock, Quantize};
 use half::f16;
 use std::iter::zip;
@@ -25,7 +25,9 @@ impl DataBlock for Q8_1 {
 impl Quantize<f32, _32> for Q8_1 {
     fn quantize(data: &[f32; _32]) -> Self {
         #[allow(clippy::assertions_on_constants)]
-        const { assert!(Self::COUNT == _32) }
+        const {
+            assert!(Self::COUNT == _32)
+        }
 
         let amax = max_abs(data);
         if amax == 0. {

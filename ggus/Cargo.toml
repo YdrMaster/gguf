@@ -13,9 +13,9 @@ categories = ["parsing", "parser-implementations", "encoding"]
 
 [dependencies]
 ggml-quants = { version = "0.0", path = "../ggml-quants" }
-meta-kv-macro = { version = "0.0", path = "../meta-kv-macro" }
 indexmap.workspace = true
 fancy-regex = "0.13"
+num_enum = "0.7"
 
 [features]
 default = ["quant-types"]

@@ -1,5 +1,5 @@
 ﻿use super::{super::Tensor, blk_tensor_name, Content, DataPromise, BLK_TENSOR_REGEX};
-use ggus::{llm_block_count, DataFuture};
+use ggus::{DataFuture, GGufMetaMapExt};
 use memmap2::MmapMut;
 use std::borrow::Cow;
 
@@ -16,11 +16,7 @@ impl Content<'_> {
         self.assert_llama();
         let tensors = std::mem::take(&mut self.tensors);
         if ty {
-            let blk = self
-                .meta_kvs
-                .get(&*llm_block_count("llama"))
-                .map(|kv| kv.value_reader().read_llm_block_count_val().unwrap())
-                .expect("missing block count") as _;
+            let blk = self.llm_block_count().expect("missing block count") as _;
 
             let mut qkv = MergeCollector::<NUM_QKV>::new(blk);
             let mut gate_up = MergeCollector::<NUM_GATE_UP>::new(blk);

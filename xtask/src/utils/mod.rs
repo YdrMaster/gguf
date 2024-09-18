@@ -5,7 +5,7 @@ mod read;
 mod write;
 
 use file_info::FileInfo;
-use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufReader};
+use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufMetaMap, GGufReader};
 use indexmap::IndexMap;
 use log::info;
 use memmap2::{Mmap, MmapMut};
@@ -66,6 +66,12 @@ struct Content<'a> {
     alignment: usize,
     meta_kvs: IndexMap<Cow<'a, str>, MetaValue<'a>>,
     tensors: IndexMap<Cow<'a, str>, Tensor<'a>>,
+}
+
+impl GGufMetaMap for Content<'_> {
+    fn get(&self, key: &str) -> Option<(GGufMetaDataValueType, &[u8])> {
+        self.meta_kvs.get(key).map(|v| (v.ty, &*v.value))
+    }
 }
 
 struct MetaValue<'a> {
