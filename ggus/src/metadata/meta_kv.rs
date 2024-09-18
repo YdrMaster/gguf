@@ -159,7 +159,7 @@ impl<'a, T: ?Sized> GGufMetaValueArray<'a, T> {
 impl<'a> Iterator for GGufMetaValueArray<'a, str> {
     type Item = Result<&'a str, GGufReadError>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
+        if self.len != 0 {
             self.len -= 1;
             Some(self.reader.read_str())
         } else {
@@ -171,7 +171,7 @@ impl<'a> Iterator for GGufMetaValueArray<'a, str> {
 impl<T: Copy> Iterator for GGufMetaValueArray<'_, T> {
     type Item = Result<T, GGufReadError>;
     fn next(&mut self) -> Option<Self::Item> {
-        if self.len == 0 {
+        if self.len != 0 {
             self.len -= 1;
             Some(self.reader.read())
         } else {

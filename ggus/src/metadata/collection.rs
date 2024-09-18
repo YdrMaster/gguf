@@ -549,6 +549,16 @@ pub trait GGufMetaMapExt: GGufMetaMap {
     fn tokenizer_ggml_padding_token_id(&self) -> Result<u32, GGufMetaError> {
         self.get_u32("tokenizer.ggml.padding_token_id")
     }
+
+    #[inline]
+    fn tokenizer_rwkv_world(&self) -> Result<&str, GGufMetaError> {
+        self.get_str("tokenizer.rwkv.world")
+    }
+
+    #[inline]
+    fn tokenizer_chat_template(&self) -> Result<&str, GGufMetaError> {
+        self.get_str("tokenizer.chat_template")
+    }
 }
 
 impl<T: GGufMetaMap> GGufMetaMapExt for T {}
