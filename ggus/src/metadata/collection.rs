@@ -1,4 +1,4 @@
-﻿use super::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaValueArray};
+﻿use super::{GGufFileType, GGufMetaDataValueType as Ty, GGufMetaValueArray, DEFAULT_ALIGNMENT};
 use crate::{GGufReadError, GGufReader};
 
 pub trait GGufMetaMap {
@@ -139,7 +139,11 @@ pub trait GGufMetaMapExt: GGufMetaMap {
 
     #[inline]
     fn general_alignment(&self) -> Result<usize, GGufMetaError> {
-        self.get_usize("general.alignment")
+        match self.get_usize("general.alignment") {
+            Ok(n) => Ok(n),
+            Err(GGufMetaError::NotExist) => Ok(DEFAULT_ALIGNMENT),
+            Err(e) => Err(e),
+        }
     }
 
     #[inline]
@@ -366,7 +370,11 @@ pub trait GGufMetaMapExt: GGufMetaMap {
     #[inline]
     fn llm_attention_head_count_kv(&self) -> Result<usize, GGufMetaError> {
         let llm = self.general_architecture().unwrap();
-        self.get_usize(&format!("{llm}.attention.head_count_kv"))
+        match self.get_usize(&format!("{llm}.attention.head_count_kv")) {
+            Ok(n) => Ok(n),
+            Err(GGufMetaError::NotExist) => self.llm_attention_head_count(),
+            Err(e) => Err(e),
+        }
     }
 
     #[inline]
@@ -396,13 +404,29 @@ pub trait GGufMetaMapExt: GGufMetaMap {
     #[inline]
     fn llm_attention_key_length(&self) -> Result<usize, GGufMetaError> {
         let llm = self.general_architecture().unwrap();
-        self.get_usize(&format!("{llm}.attention.key_length"))
+        match self.get_usize(&format!("{llm}.attention.key_length")) {
+            Ok(n) => Ok(n),
+            Err(GGufMetaError::NotExist) => {
+                let n_embed = self.llm_embedding_length()?;
+                let n_head = self.llm_attention_head_count()?;
+                Ok(n_embed / n_head)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     #[inline]
     fn llm_attention_value_length(&self) -> Result<usize, GGufMetaError> {
         let llm = self.general_architecture().unwrap();
-        self.get_usize(&format!("{llm}.attention.value_length"))
+        match self.get_usize(&format!("{llm}.attention.value_length")) {
+            Ok(n) => Ok(n),
+            Err(GGufMetaError::NotExist) => {
+                let n_embed = self.llm_embedding_length()?;
+                let n_head = self.llm_attention_head_count()?;
+                Ok(n_embed / n_head)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     #[inline]
