@@ -11,7 +11,7 @@ indexmap.workspace = true
 rayon.workspace = true
 itertools = "0.13"
 memmap2 = "0.9"
-regex = "1.10"
+regex = "1.11"
 clap = { version = "4.5", features = ["derive"] }
 
 time = "0.3"

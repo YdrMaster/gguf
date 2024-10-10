@@ -3,5 +3,5 @@ members = ["ggus", "ggml-quants", "xtask"]
 resolver = "2"
 
 [workspace.dependencies]
-indexmap = "2.5"
+indexmap = "2.6"
 rayon = "1.10"
