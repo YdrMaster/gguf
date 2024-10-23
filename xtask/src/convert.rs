@@ -12,7 +12,7 @@ pub struct ConvertArgs {
     /// Output directory for converted files
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
-    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "set-arch:<arch>", "filter-meta:<key>", "filter-tensor:<name>" or "cast:<dtype>""
+    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "scale-token-embd:<scale>", "set-arch:<arch>", "filter-meta:<key>", "filter-tensor:<name>" or "cast:<dtype>""
     #[clap(long, short = 'x')]
     steps: String,
     /// Max count of tensors per shard
@@ -52,6 +52,7 @@ impl ConvertArgs {
                 "merge-linear" => Operator::MergeLinear(true),
                 "split-linear" | "!merge-linear" => Operator::MergeLinear(false),
                 op => match op.split_once(':') {
+                    Some(("scale-token-embd", scale)) => Operator::scale_token_embd(scale),
                     Some(("set-arch", arch)) => Operator::set_arch(arch),
                     Some(("filter-meta", key)) => Operator::filter_meta_key(key),
                     Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),

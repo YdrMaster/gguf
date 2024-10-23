@@ -3,14 +3,17 @@
     LogArgs,
 };
 use ggus::GGufFileName;
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    fs::read_to_string,
+    path::{Path, PathBuf},
+};
 
 #[derive(Args, Default)]
 pub struct SetMetaArgs {
     /// File to set metadata
     file: PathBuf,
     /// Meta data to set for the file
-    meta_kvs: PathBuf,
+    meta_kvs: String,
     /// Output directory for changed file
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
@@ -29,18 +32,23 @@ impl SetMetaArgs {
         } = self;
         log.init();
 
-        let cfg = read_to_string(meta_kvs).unwrap();
-        // 消除 utf-8 BOM
-        let cfg = if cfg.as_bytes()[..3] == [0xef, 0xbb, 0xbf] {
-            &cfg[3..]
+        let path = Path::new(&meta_kvs);
+        let cfg = if path.is_file() {
+            let cfg = read_to_string(path).unwrap();
+            // 消除 utf-8 BOM
+            if cfg.as_bytes()[..3] == [0xef, 0xbb, 0xbf] {
+                cfg[3..].to_string()
+            } else {
+                cfg
+            }
         } else {
-            &cfg[..]
+            meta_kvs
         };
 
         let files = operate(
             GGufFileName::try_from(&*file).unwrap(),
             [&file],
-            [Operator::set_meta_by_cfg(cfg)],
+            [Operator::set_meta_by_cfg(&cfg)],
             OutputConfig {
                 dir: output_dir,
                 shard_max_tensor_count: usize::MAX,

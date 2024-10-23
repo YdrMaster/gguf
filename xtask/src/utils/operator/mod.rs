@@ -1,5 +1,6 @@
 ﻿mod merge;
 mod quantize;
+mod scale_token_embd;
 mod set_arch;
 mod set_meta;
 mod sort;
@@ -19,6 +20,7 @@ pub(crate) enum Operator {
     FilterTensorName(Regex),
     Cast { w: GGmlType, a: GGmlType },
     MergeLinear(bool),
+    ScaleTokenEmbd(f64),
     SetArch(String),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
     SortTensors,
@@ -55,6 +57,9 @@ impl fmt::Display for Operator {
                     write!(f, "split-linear")
                 }
             }
+            Self::ScaleTokenEmbd(scale) => {
+                write!(f, "scale-token-embd: {scale}")
+            }
             Self::SetArch(arch) => {
                 write!(f, "set-arch: \"{arch}\"")
             }
@@ -86,6 +91,7 @@ impl Content<'_> {
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
             Cast { w, a } => self.cast(w, a),
             MergeLinear(ty) => self.merge_linear(ty),
+            ScaleTokenEmbd(scale) => self.scale_token_embd(scale),
             SetArch(arch) => self.set_arch(&arch),
             SetMeta(map) => self.set_meta(map),
             SortTensors => self.sort_tensors(),

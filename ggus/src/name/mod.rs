@@ -145,5 +145,5 @@ fn match_name(value: &str) -> Captures {
 
 #[test]
 fn test_name() {
-    match_name("CPM-1B-Chat-v0.0-F16.gguf");
+    match_name("MiniCPM3-1B-sft-v0.0-F16.gguf");
 }

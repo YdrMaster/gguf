@@ -80,10 +80,11 @@ impl State {
                             LazyLock::new(|| Regex::new($pattern).unwrap());
                     };
                 }
-                regex!(KV_REGEX  r"^`(?<Key>(\w+\.)*\w+)`\s*(?<Type>\S+)");
+                regex!(KV_REGEX  r"^'(?<Key>(\w+\.)*\w+)'\s*(?<Type>\S+)");
                 regex!(ARR_REGEX r"^\[(\w+)\](\S+)?$");
 
                 // 匹配元信息配置项
+                println!("line: {:?}", line);
                 let matches = KV_REGEX.captures(line).expect("Expect meta kv config item");
                 let key = matches.name("Key").unwrap().as_str().to_string();
                 let ty = matches.name("Type").unwrap();
