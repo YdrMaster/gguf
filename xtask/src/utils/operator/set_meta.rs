@@ -145,9 +145,8 @@ impl State {
 }
 
 mod internal {
-    use std::collections::HashMap;
-
     use super::{write_val, Ty};
+    use std::collections::HashMap;
 
     #[derive(Debug)]
     pub(super) struct StrCollector {
