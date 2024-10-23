@@ -12,7 +12,7 @@ pub struct ConvertArgs {
     /// Output directory for converted files
     #[clap(long, short)]
     output_dir: Option<PathBuf>,
-    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>", "cast:<dtype>" or "distribute:<n>"
+    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>" or "cast:<dtype>""
     #[clap(long, short = 'x')]
     steps: String,
     /// Max count of tensors per shard
@@ -55,7 +55,6 @@ impl ConvertArgs {
                     Some(("filter-meta", key)) => Operator::filter_meta_key(key),
                     Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),
                     Some(("cast", dtype)) => Operator::quantize(dtype),
-                    Some(("distribute", n)) => Operator::distribute(n),
                     _ => panic!("Unsupported operation: {op}"),
                 },
             }),

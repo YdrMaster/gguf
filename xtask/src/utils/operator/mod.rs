@@ -1,5 +1,4 @@
-﻿mod distribute;
-mod merge;
+﻿mod merge;
 mod quantize;
 mod set_meta;
 mod sort;
@@ -21,7 +20,6 @@ pub(crate) enum Operator {
     MergeLinear(bool),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
     SortTensors,
-    Distribute(usize),
 }
 
 impl fmt::Display for Operator {
@@ -59,7 +57,6 @@ impl fmt::Display for Operator {
                 write!(f, "set-meta: {} items", map.len())
             }
             Self::SortTensors => write!(f, "sort-tensors"),
-            &Self::Distribute(n) => write!(f, "distribute: {n}"),
         }
     }
 }
@@ -86,7 +83,6 @@ impl Content<'_> {
             MergeLinear(ty) => self.merge_linear(ty),
             SetMeta(map) => self.set_meta(map),
             SortTensors => self.sort_tensors(),
-            Distribute(n) => self.distribute(n),
         }
     }
 

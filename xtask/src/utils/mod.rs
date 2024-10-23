@@ -5,7 +5,7 @@ mod read;
 mod write;
 
 use file_info::FileInfo;
-use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufMetaMap, GGufReader};
+use ggus::{GGmlType, GGufError, GGufFileName, GGufMetaDataValueType, GGufMetaMap};
 use indexmap::IndexMap;
 use log::info;
 use memmap2::{Mmap, MmapMut};
@@ -77,13 +77,6 @@ impl GGufMetaMap for Content<'_> {
 struct MetaValue<'a> {
     ty: GGufMetaDataValueType,
     value: Cow<'a, [u8]>,
-}
-
-impl MetaValue<'_> {
-    #[inline]
-    fn value_reader(&self) -> GGufReader {
-        GGufReader::new(&self.value)
-    }
 }
 
 struct Tensor<'a> {

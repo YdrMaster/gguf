@@ -143,7 +143,7 @@ Arguments:
 
 Options:
   -o, --output-dir <OUTPUT_DIR>    Output directory for converted files
-  -x, --steps <STEPS>              Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>", "cast:<dtype>" or "distribute:<n>"
+  -x, --steps <STEPS>              Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>" or "cast:<dtype>"
   -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
   -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
   -n, --no-tensor-first            If set, the first shard will not contain any tensor
