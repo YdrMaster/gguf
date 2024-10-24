@@ -151,6 +151,30 @@ Options:
   -h, --help                       Print help
 ```
 
+### 转换到标准 llama
+
+```plaintext
+cargo to-llama --help
+```
+
+```plaintext
+Convert gguf files to Llama format
+
+Usage: xtask.exe to-llama [OPTIONS] <FILE>
+
+Arguments:
+  <FILE>  File to convert
+
+Options:
+  -x, --extra <EXTRA>              Extra metadata for convertion
+  -o, --output-dir <OUTPUT_DIR>    Output directory for converted files
+  -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
+  -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
+  -n, --no-tensor-first            If set, the first shard will not contain any tensor
+      --log <LOG>                  Log level, may be "off", "trace", "debug", "info" or "error"
+  -h, --help                       Print help
+```
+
 ### 修改元信息
 
 ```plaintext
@@ -172,14 +196,16 @@ Options:
   -h, --help                     Print help
 ```
 
-`<META_KVS>` 是具有类似如下格式的文本文件：
+`<META_KVS>` 是具有特定格式的字符串或文本文件路径。工具将先检查文件是否为路径，如果是则从文件读取，否则视作字符串字面量。
+
+格式要求如下：
 
 1. 配置代数类型元信息
 
    > 代数类型包括整型、无符号整型、浮点型和布尔。
 
    ```plaintext
-   `<KEY>`<Ty> <VAL>
+   '<KEY>'<Ty> <VAL>
    ```
 
 2. 配置字符串元信息
@@ -187,13 +213,13 @@ Options:
    单行字符串：
 
    ```plaintext
-   `<KEY>`str "<VAL>"
+   '<KEY>'str "<VAL>"
    ```
 
    多行字符串：
 
    ```plaintext
-   `<KEY>`str<Sep>
+   '<KEY>'str<Sep>
    <Sep> [Content]
    <Sep> [Content]
    <Sep> [Content]
@@ -211,15 +237,15 @@ Options:
 这是一个配置元信息的示例文件内容：
 
 ```plaintext
-`llama.block_count`             u64 22
-`llama.context_length`          u64 2048
-`llama.embedding_length`        u64 2048
-`llama.feed_forward_length`     u64 5632
-`llama.attention.head_count`    u64 32
-`llama.attention.head_count_kv` u64 4
-`llama.rope.dimension_count`    u64 64
+'llama.block_count'             u64 22
+'llama.context_length'          u64 2048
+'llama.embedding_length'        u64 2048
+'llama.feed_forward_length'     u64 5632
+'llama.attention.head_count'    u64 32
+'llama.attention.head_count_kv' u64 4
+'llama.rope.dimension_count'    u64 64
 
-`tokenizer.chat_template` str|
+'tokenizer.chat_template' str|
 | {%- for message in messages -%}
 | {%- if message['role'] == 'user' -%}
 | {{ '<|user|>

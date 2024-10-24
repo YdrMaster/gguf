@@ -80,7 +80,7 @@ impl State {
                             LazyLock::new(|| Regex::new($pattern).unwrap());
                     };
                 }
-                regex!(KV_REGEX  r"^`(?<Key>(\w+\.)*\w+)`\s*(?<Type>\S+)");
+                regex!(KV_REGEX  r"^'(?<Key>(\w+\.)*\w+)'\s*(?<Type>\S+)");
                 regex!(ARR_REGEX r"^\[(\w+)\](\S+)?$");
 
                 // 匹配元信息配置项
@@ -145,9 +145,8 @@ impl State {
 }
 
 mod internal {
-    use std::collections::HashMap;
-
     use super::{write_val, Ty};
+    use std::collections::HashMap;
 
     #[derive(Debug)]
     pub(super) struct StrCollector {

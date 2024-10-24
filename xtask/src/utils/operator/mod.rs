@@ -2,6 +2,7 @@
 mod quantize;
 mod set_meta;
 mod sort;
+mod to_llama;
 
 use super::{compile_patterns, Content, DataPromise};
 use ggus::{GGmlType, GGufMetaDataValueType, GGufMetaMapExt};
@@ -14,6 +15,7 @@ use std::{
 };
 
 pub(crate) enum Operator {
+    ToLlama(Option<String>),
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
     Cast { w: GGmlType, a: GGmlType },
@@ -25,6 +27,7 @@ pub(crate) enum Operator {
 impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            Self::ToLlama(_extra) => write!(f, "to-llama"),
             Self::FilterMetaKey(regex) => write!(f, "filter-meta: {}", regex.as_str()),
             Self::FilterTensorName(regex) => write!(f, "filter-tensor: {}", regex.as_str()),
             &Self::Cast { w, a } => {
@@ -77,6 +80,7 @@ impl Content<'_> {
     pub fn apply(&mut self, op: Operator) {
         use Operator::*;
         match op {
+            ToLlama(extra) => self.convert_to_llama(extra),
             FilterMetaKey(r) => self.meta_kvs.retain(|k, _| r.is_match(k)),
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
             Cast { w, a } => self.cast(w, a),
