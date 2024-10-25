@@ -116,7 +116,7 @@ fn make_qx_quants(x: &[f32], nmax: isize) -> (f32, Vec<usize>) {
         .map(|i| -(nmax as f32) / max + (i as f32) * 0.1)
         .map(|iscale| {
             let suml = x.iter().fold((0., 0.), |(sumlx, suml2), a| {
-                let l = (*a * iscale) as isize;
+                let l = (*a * iscale).round() as isize;
                 let l = (-nmax).max((nmax - 1).min(l)) as f32;
                 let w = a * a;
                 (sumlx + w * a * l, suml2 + w * l * l)
@@ -135,7 +135,7 @@ fn make_qx_quants(x: &[f32], nmax: isize) -> (f32, Vec<usize>) {
         })
         .map(|(iscale, (sumlx, suml2))| {
             let L = x.iter().map(|a| {
-                let l = (*a * iscale) as isize;
+                let l = (*a * iscale).round() as isize;
                 let l = (-nmax).max((nmax - 1).min(l));
                 (l + nmax) as usize
             });
