@@ -1,5 +1,5 @@
 ﻿use crate::{
-    utils::{operate, show_file_info, OutputConfig},
+    utils::{operate, show_file_info, OutputArgs},
     LogArgs,
 };
 use ggus::GGufFileName;
@@ -9,33 +9,16 @@ use std::{ops::Deref, path::PathBuf};
 pub struct SplitArgs {
     /// File to split
     file: PathBuf,
-    /// Output directory for splited shards
-    #[clap(long, short)]
-    output_dir: Option<PathBuf>,
-    /// Max count of tensors per shard
-    #[clap(long, short = 't')]
-    max_tensors: Option<usize>,
-    /// Max size in bytes per shard
-    #[clap(long, short = 's')]
-    max_bytes: Option<String>,
-    /// If set, the first shard will not contain any tensor
-    #[clap(long, short)]
-    no_tensor_first: bool,
 
+    #[clap(flatten)]
+    output: OutputArgs,
     #[clap(flatten)]
     log: LogArgs,
 }
 
 impl SplitArgs {
     pub fn split(self) {
-        let Self {
-            file,
-            output_dir,
-            max_tensors,
-            max_bytes,
-            no_tensor_first,
-            log,
-        } = self;
+        let Self { file, output, log } = self;
         log.init();
 
         let name: GGufFileName = file.deref().try_into().unwrap();
@@ -44,19 +27,7 @@ impl SplitArgs {
             return;
         }
 
-        let files = operate(
-            name,
-            [&file],
-            [],
-            OutputConfig {
-                dir: output_dir,
-                shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
-                shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
-                shard_no_tensor_first: no_tensor_first,
-            },
-        )
-        .unwrap();
-
+        let files = operate(name, [&file], [], output.into()).unwrap();
         show_file_info(&files);
     }
 }

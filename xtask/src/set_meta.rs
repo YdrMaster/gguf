@@ -1,5 +1,5 @@
 ﻿use crate::{
-    utils::{operate, show_file_info, Operator, OutputConfig},
+    utils::{operate, show_file_info, Operator, OutputArgs},
     LogArgs,
 };
 use ggus::GGufFileName;
@@ -14,10 +14,9 @@ pub struct SetMetaArgs {
     file: PathBuf,
     /// Meta data to set for the file
     meta_kvs: String,
-    /// Output directory for changed file
-    #[clap(long, short)]
-    output_dir: Option<PathBuf>,
 
+    #[clap(flatten)]
+    output: OutputArgs,
     #[clap(flatten)]
     log: LogArgs,
 }
@@ -27,7 +26,7 @@ impl SetMetaArgs {
         let Self {
             file,
             meta_kvs,
-            output_dir,
+            output,
             log,
         } = self;
         log.init();
@@ -49,12 +48,7 @@ impl SetMetaArgs {
             GGufFileName::try_from(&*file).unwrap(),
             [&file],
             [Operator::set_meta_by_cfg(&cfg)],
-            OutputConfig {
-                dir: output_dir,
-                shard_max_tensor_count: usize::MAX,
-                shard_max_file_size: Default::default(),
-                shard_no_tensor_first: false,
-            },
+            output.into(),
         )
         .unwrap();
 

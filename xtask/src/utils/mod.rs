@@ -1,6 +1,7 @@
 ﻿mod file_info;
 mod name_pattern;
 mod operator;
+mod output;
 mod read;
 mod write;
 
@@ -13,21 +14,15 @@ use std::{
     borrow::Cow,
     fs::File,
     io,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, LazyLock},
     time::Instant,
 };
 
-pub(crate) use file_info::{show_file_info, MemSize};
+pub(crate) use file_info::show_file_info;
 pub(crate) use name_pattern::compile_patterns;
 pub(crate) use operator::Operator;
-
-pub(crate) struct OutputConfig {
-    pub dir: Option<PathBuf>,
-    pub shard_max_tensor_count: usize,
-    pub shard_max_file_size: MemSize,
-    pub shard_no_tensor_first: bool,
-}
+pub(crate) use output::{OutputArgs, OutputConfig};
 
 #[allow(dead_code)]
 #[derive(Debug)]

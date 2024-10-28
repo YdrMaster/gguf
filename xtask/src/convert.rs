@@ -1,5 +1,6 @@
 ﻿use crate::{
-    utils::{operate, show_file_info, Operator, OutputConfig},
+    utils::OutputArgs,
+    utils::{operate, show_file_info, Operator},
     LogArgs,
 };
 use ggus::GGufFileName;
@@ -9,22 +10,12 @@ use std::path::PathBuf;
 pub struct ConvertArgs {
     /// File to convert
     file: PathBuf,
-    /// Output directory for converted files
-    #[clap(long, short)]
-    output_dir: Option<PathBuf>,
-    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>", "filter-tensor:<name>" or "cast:<dtype>"
+    /// Steps to apply, separated by "->", maybe "sort", "merge-linear", "split-linear", "filter-meta:<key>" or "filter-tensor:<name>"
     #[clap(long, short = 'x')]
     steps: String,
-    /// Max count of tensors per shard
-    #[clap(long, short = 't')]
-    max_tensors: Option<usize>,
-    /// Max size in bytes per shard
-    #[clap(long, short = 's')]
-    max_bytes: Option<String>,
-    /// If set, the first shard will not contain any tensor
-    #[clap(long, short)]
-    no_tensor_first: bool,
 
+    #[clap(flatten)]
+    output: OutputArgs,
     #[clap(flatten)]
     log: LogArgs,
 }
@@ -33,11 +24,8 @@ impl ConvertArgs {
     pub fn convert(self) {
         let Self {
             file,
-            output_dir,
             steps,
-            max_tensors,
-            max_bytes,
-            no_tensor_first,
+            output,
             log,
         } = self;
         log.init();
@@ -54,16 +42,10 @@ impl ConvertArgs {
                 op => match op.split_once(':') {
                     Some(("filter-meta", key)) => Operator::filter_meta_key(key),
                     Some(("filter-tensor", name)) => Operator::filter_tensor_name(name),
-                    Some(("cast", dtype)) => Operator::quantize(dtype),
                     _ => panic!("Unsupported operation: {op}"),
                 },
             }),
-            OutputConfig {
-                dir: output_dir,
-                shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
-                shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
-                shard_no_tensor_first: no_tensor_first,
-            },
+            output.into(),
         )
         .unwrap();
 

@@ -1,5 +1,5 @@
 ﻿use crate::{
-    utils::{operate, show_file_info, Operator, OutputConfig},
+    utils::{operate, show_file_info, Operator, OutputArgs},
     LogArgs,
 };
 use ggus::GGufFileName;
@@ -12,19 +12,9 @@ pub struct ToLlamaArgs {
     /// Extra metadata for convertion
     #[clap(long, short = 'x')]
     extra: Option<String>,
-    /// Output directory for converted files
-    #[clap(long, short)]
-    output_dir: Option<PathBuf>,
-    /// Max count of tensors per shard
-    #[clap(long, short = 't')]
-    max_tensors: Option<usize>,
-    /// Max size in bytes per shard
-    #[clap(long, short = 's')]
-    max_bytes: Option<String>,
-    /// If set, the first shard will not contain any tensor
-    #[clap(long, short)]
-    no_tensor_first: bool,
 
+    #[clap(flatten)]
+    output: OutputArgs,
     #[clap(flatten)]
     log: LogArgs,
 }
@@ -34,10 +24,7 @@ impl ToLlamaArgs {
         let Self {
             file,
             extra,
-            output_dir,
-            max_tensors,
-            max_bytes,
-            no_tensor_first,
+            output,
             log,
         } = self;
         log.init();
@@ -48,12 +35,7 @@ impl ToLlamaArgs {
             name.clone(),
             name.iter_all().map(|name| dir.join(name.to_string())),
             [Operator::ToLlama(extra)],
-            OutputConfig {
-                dir: output_dir,
-                shard_max_tensor_count: max_tensors.unwrap_or(usize::MAX),
-                shard_max_file_size: max_bytes.map_or(Default::default(), |s| s.parse().unwrap()),
-                shard_no_tensor_first: no_tensor_first,
-            },
+            output.into(),
         )
         .unwrap();
 

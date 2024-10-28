@@ -1,52 +1,28 @@
-﻿use super::{Content, DataPromise, Operator};
+﻿use super::{Content, DataPromise};
 use ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0};
 use ggus::{DataFuture, GGmlType as Ty};
 use log::debug;
 use memmap2::MmapMut;
 use std::alloc::Layout;
 
-impl Operator {
-    pub fn quantize(t: impl AsRef<str>) -> Self {
-        fn split(s: &str) -> Option<(&str, &str)> {
-            s.strip_prefix('w')?.split_once('a')
-        }
-        fn parse(s: &str) -> Ty {
-            match s {
-                "16" | "f16" | "fp16" | "half" => Ty::F16,
-                "32" | "f32" | "fp32" | "float" => Ty::F32,
-                "bf16" => Ty::BF16,
-                "q4_0" => Ty::Q4_0,
-                "q4_1" => Ty::Q4_1,
-                "q5_0" => Ty::Q5_0,
-                "q5_1" => Ty::Q5_1,
-                "q8_0" => Ty::Q8_0,
-                _ => panic!("Unsupported type: {s}"),
-            }
-        }
-
-        let t = t.as_ref().trim().to_lowercase();
-        let (w, a) = split(&t).expect("Cast type must be in the format of `w_a_`");
-        Self::Cast {
-            w: parse(w),
-            a: parse(a),
-        }
-    }
-}
-
 impl Content<'_> {
-    pub(super) fn cast(&mut self, tw: Ty, ta: Ty) {
+    pub(super) fn cast(&mut self, embd: Option<Ty>, norm: Option<Ty>, mat: Option<Ty>) {
         self.assert_llama();
 
-        self.name.encoding = Some(format!("{tw:?}").into());
+        self.name.encoding = Some(format!("{mat:?}").into());
         for (name, tensor) in self.tensors.as_mut_slice() {
             if tensor.shape.len() == 1 {
                 continue;
             }
             let from = tensor.ty;
             let to = match &**name {
-                "token_embd.weight" | "output.weight" => ta,
-                _ if !name.ends_with("_norm.weight") => tw,
+                "token_embd.weight" | "output.weight" => embd,
+                _ if name.ends_with("_norm.weight") => norm,
+                _ if tensor.shape.len() > 1 => mat,
                 _ => continue,
+            };
+            let Some(to) = to else {
+                continue;
             };
             if from == to {
                 continue;

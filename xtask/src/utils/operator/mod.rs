@@ -1,5 +1,5 @@
-﻿mod merge;
-mod quantize;
+﻿mod cast;
+mod merge;
 mod set_meta;
 mod sort;
 mod to_llama;
@@ -14,11 +14,16 @@ use std::{
     sync::LazyLock,
 };
 
+#[allow(unused)]
 pub(crate) enum Operator {
     ToLlama(Option<String>),
     FilterMetaKey(Regex),
     FilterTensorName(Regex),
-    Cast { w: GGmlType, a: GGmlType },
+    Cast {
+        embd: Option<GGmlType>,
+        norm: Option<GGmlType>,
+        mat: Option<GGmlType>,
+    },
     MergeLinear(bool),
     SetMeta(HashMap<String, (GGufMetaDataValueType, Vec<u8>)>),
     SortTensors,
@@ -30,25 +35,7 @@ impl fmt::Display for Operator {
             Self::ToLlama(_extra) => write!(f, "to-llama"),
             Self::FilterMetaKey(regex) => write!(f, "filter-meta: {}", regex.as_str()),
             Self::FilterTensorName(regex) => write!(f, "filter-tensor: {}", regex.as_str()),
-            &Self::Cast { w, a } => {
-                fn write_ty(f: &mut fmt::Formatter, ty: GGmlType) -> fmt::Result {
-                    match ty {
-                        GGmlType::F32 => write!(f, "32"),
-                        GGmlType::F16 => write!(f, "16"),
-                        GGmlType::I8 => write!(f, "8"),
-                        GGmlType::I16 => write!(f, "i16"),
-                        GGmlType::I32 => write!(f, "i32"),
-                        GGmlType::I64 => write!(f, "i64"),
-                        GGmlType::F64 => write!(f, "64"),
-                        GGmlType::BF16 => write!(f, "bf16"),
-                        _ => write!(f, "{ty:?}"),
-                    }
-                }
-                write!(f, "cast: w")?;
-                write_ty(f, w)?;
-                write!(f, "a")?;
-                write_ty(f, a)
-            }
+            &Self::Cast { .. } => write!(f, "cast"),
             &Self::MergeLinear(val) => {
                 if val {
                     write!(f, "merge-linear",)
@@ -83,7 +70,7 @@ impl Content<'_> {
             ToLlama(extra) => self.convert_to_llama(extra),
             FilterMetaKey(r) => self.meta_kvs.retain(|k, _| r.is_match(k)),
             FilterTensorName(r) => self.tensors.retain(|k, _| r.is_match(k)),
-            Cast { w, a } => self.cast(w, a),
+            Cast { embd, norm, mat } => self.cast(embd, norm, mat),
             MergeLinear(ty) => self.merge_linear(ty),
             SetMeta(map) => self.set_meta(map),
             SortTensors => self.sort_tensors(),
