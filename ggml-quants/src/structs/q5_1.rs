@@ -11,7 +11,7 @@ pub struct Q5_1 {
 
 impl DataBlock for Q5_1 {
     #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
+    const ID: digit_layout::DigitLayout = crate::types::Q5_1;
     const COUNT: usize = _32;
     const ZEROS: Self = Self {
         delta_min: DeltaMin::ZERO,

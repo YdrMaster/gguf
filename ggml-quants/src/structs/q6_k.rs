@@ -12,7 +12,7 @@ pub struct Q6K {
 
 impl DataBlock for Q6K {
     #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
+    const ID: digit_layout::DigitLayout = crate::types::Q6K;
     const COUNT: usize = _256;
     const ZEROS: Self = Self {
         ql: [0; _256 / 2],

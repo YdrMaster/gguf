@@ -10,7 +10,7 @@ pub struct Q4_1 {
 
 impl DataBlock for Q4_1 {
     #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
+    const ID: digit_layout::DigitLayout = crate::types::Q4_1;
     const COUNT: usize = _32;
     const ZEROS: Self = Self {
         delta_min: DeltaMin::ZERO,

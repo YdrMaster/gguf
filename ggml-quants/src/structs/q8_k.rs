@@ -12,7 +12,7 @@ pub struct Q8K {
 
 impl DataBlock for Q8K {
     #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ1M;
+    const ID: digit_layout::DigitLayout = crate::types::Q8K;
     const COUNT: usize = _256;
     const ZEROS: Self = Self {
         delta: f16::ZERO,
