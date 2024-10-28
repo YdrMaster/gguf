@@ -116,3 +116,68 @@ pub extern crate digit_layout;
 
 #[cfg(feature = "types")]
 pub mod types;
+
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) mod test_utils {
+    use std::fmt;
+
+    pub struct Diff {
+        pub abs: f32,
+        pub rel: f32,
+    }
+
+    impl Diff {
+        pub fn new(a: f32, b: f32) -> Self {
+            let abs = (a - b).abs();
+            let rel = abs / (a.abs() + b.abs() + f32::EPSILON);
+            Self { abs, rel }
+        }
+    }
+
+    pub struct ErrorCollector {
+        threshold: Diff,
+        max_diff: Diff,
+        outliers: Vec<usize>,
+        count: usize,
+    }
+
+    impl ErrorCollector {
+        pub fn new(abs: f32, rel: f32) -> Self {
+            Self {
+                threshold: Diff { abs, rel },
+                max_diff: Diff { abs: 0.0, rel: 0.0 },
+                outliers: vec![],
+                count: 0,
+            }
+        }
+
+        pub fn push(&mut self, diff: Diff) {
+            self.max_diff.abs = f32::max(self.max_diff.abs, diff.abs);
+            self.max_diff.rel = f32::max(self.max_diff.rel, diff.rel);
+
+            if diff.abs > self.threshold.abs && diff.rel > self.threshold.rel {
+                self.outliers.push(self.count);
+            }
+
+            self.count += 1;
+        }
+
+        pub fn outliers(&self) -> &[usize] {
+            &self.outliers
+        }
+    }
+
+    impl fmt::Display for ErrorCollector {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "abs: {:.3e}, rel: {:.3e}, outliers: {}/{}",
+                self.max_diff.abs,
+                self.max_diff.rel,
+                self.outliers.len(),
+                self.count,
+            )
+        }
+    }
+}
