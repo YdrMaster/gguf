@@ -1,5 +1,5 @@
 ﻿use super::{Content, DataPromise};
-use ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0};
+use ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1};
 use ggus::{DataFuture, GGmlType as Ty};
 use log::debug;
 use memmap2::MmapMut;
@@ -9,7 +9,9 @@ impl Content<'_> {
     pub(super) fn cast(&mut self, embd: Option<Ty>, norm: Option<Ty>, mat: Option<Ty>) {
         self.assert_llama();
 
-        self.name.encoding = Some(format!("{mat:?}").into());
+        if let Some(mat) = mat {
+            self.name.encoding = Some(format!("{mat:?}").into());
+        }
         for (name, tensor) in self.tensors.as_mut_slice() {
             if tensor.shape.len() == 1 {
                 continue;
@@ -49,6 +51,7 @@ fn cast(row: usize, data: &[u8], from: Ty, to: Ty) -> MmapMut {
             Ty::Q5_0     => quantize::<Q5_0, f32, 32>(data, row),
             Ty::Q5_1     => quantize::<Q5_1, f32, 32>(data, row),
             Ty::Q8_0     => quantize::<Q8_0, f32, 32>(data, row),
+            Ty::Q8_1     => quantize::<Q8_1, f32, 32>(data, row),
             Ty::BF16     => quantize::<bf16, f32,  1>(data, row),
             _ => todo!(),
         },
@@ -60,6 +63,7 @@ fn cast(row: usize, data: &[u8], from: Ty, to: Ty) -> MmapMut {
             Ty::Q5_0     =>   quantize::<Q5_0, f16, 32>(data, row),
             Ty::Q5_1     =>   quantize::<Q5_1, f16, 32>(data, row),
             Ty::Q8_0     =>   quantize::<Q8_0, f16, 32>(data, row),
+            Ty::Q8_1     =>   quantize::<Q8_1, f16, 32>(data, row),
             Ty::BF16     =>   quantize::<bf16, f16,  1>(data, row),
             _ => todo!(),
         },
@@ -71,6 +75,7 @@ fn cast(row: usize, data: &[u8], from: Ty, to: Ty) -> MmapMut {
             Ty::Q5_0     =>   quantize::<Q5_0, bf16, 32>(data, row),
             Ty::Q5_1     =>   quantize::<Q5_1, bf16, 32>(data, row),
             Ty::Q8_0     =>   quantize::<Q8_0, bf16, 32>(data, row),
+            Ty::Q8_1     =>   quantize::<Q8_1, bf16, 32>(data, row),
             Ty::BF16     => unreachable!(),
             _ => todo!(),
         },
