@@ -61,7 +61,7 @@ impl Quantize<f32, _32> for Q5_1 {
     fn dequantize(&self) -> [f32; _32] {
         let (delta, min) = self.delta_min.to_f32();
         let qh = u32::from_le_bytes(self.qh);
-        let f = |l, h| ((l | (h as u8 & 0x10)) - 16) as f32 * delta + min;
+        let f = |l, h| (l | (h as u8 & 0x10)) as f32 * delta + min;
 
         let mut ans = [0.; _32];
         let (l, h) = ans.split_at_mut(_32 / 2);
@@ -72,4 +72,29 @@ impl Quantize<f32, _32> for Q5_1 {
         };
         ans
     }
+}
+
+#[test]
+fn test_q5_1() {
+    use crate::test_utils::{Diff, ErrorCollector};
+    use rand::Rng;
+    use std::iter::zip;
+    let mut data = [0.0f32; _32];
+    rand::thread_rng().fill(&mut data);
+
+    let q5_1 = Q5_1::quantize(&data);
+
+    let deq = <Q5_1 as Quantize<f32, _32>>::dequantize(&q5_1);
+
+    let mut ec = ErrorCollector::new(8e-2, 0.);
+    for (a, b) in zip(data, deq) {
+        ec.push(Diff::new(a, b))
+    }
+    println!("{ec}");
+
+    for &i in ec.outliers() {
+        println!("{} vs {}", data[i], deq[i]);
+    }
+
+    assert!(ec.outliers().is_empty());
 }
