@@ -76,25 +76,5 @@ impl Quantize<f32, _32> for Q5_1 {
 
 #[test]
 fn test_q5_1() {
-    use crate::test_utils::{Diff, ErrorCollector};
-    use rand::Rng;
-    use std::iter::zip;
-    let mut data = [0.0f32; _32];
-    rand::thread_rng().fill(&mut data);
-
-    let q5_1 = Q5_1::quantize(&data);
-
-    let deq = <Q5_1 as Quantize<f32, _32>>::dequantize(&q5_1);
-
-    let mut ec = ErrorCollector::new(8e-2, 0.);
-    for (a, b) in zip(data, deq) {
-        ec.push(Diff::new(a, b))
-    }
-    println!("{ec}");
-
-    for &i in ec.outliers() {
-        println!("{} vs {}", data[i], deq[i]);
-    }
-
-    assert!(ec.outliers().is_empty());
+    crate::test_utils::test::<32_, Q5_1>(2e-2, 0.);
 }

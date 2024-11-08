@@ -120,22 +120,46 @@ pub mod types;
 #[cfg(test)]
 #[allow(dead_code)]
 pub(crate) mod test_utils {
+    use crate::Quantize;
     use std::fmt;
 
-    pub struct Diff {
+    pub fn test<const N: usize, T: Quantize<f32, N>>(abs: f32, rel: f32) {
+        use rand::Rng;
+        use std::iter::zip;
+
+        let mut data = [0.0f32; N];
+        rand::thread_rng().fill(&mut data[..]);
+
+        let quant = T::quantize(&data);
+        let dequant = T::dequantize(&quant);
+
+        let mut ec = ErrorCollector::new(abs, rel);
+        for (a, b) in zip(data, dequant) {
+            ec.push(Diff::new(a, b))
+        }
+        println!("{ec}");
+
+        for &i in ec.outliers() {
+            println!("{} vs {}", data[i], dequant[i]);
+        }
+
+        assert!(ec.outliers().is_empty());
+    }
+
+    struct Diff {
         pub abs: f32,
         pub rel: f32,
     }
 
     impl Diff {
-        pub fn new(a: f32, b: f32) -> Self {
+        fn new(a: f32, b: f32) -> Self {
             let abs = (a - b).abs();
             let rel = abs / (a.abs() + b.abs() + f32::EPSILON);
             Self { abs, rel }
         }
     }
 
-    pub struct ErrorCollector {
+    struct ErrorCollector {
         threshold: Diff,
         max_diff: Diff,
         outliers: Vec<usize>,
@@ -143,7 +167,7 @@ pub(crate) mod test_utils {
     }
 
     impl ErrorCollector {
-        pub fn new(abs: f32, rel: f32) -> Self {
+        fn new(abs: f32, rel: f32) -> Self {
             Self {
                 threshold: Diff { abs, rel },
                 max_diff: Diff { abs: 0.0, rel: 0.0 },
@@ -152,7 +176,7 @@ pub(crate) mod test_utils {
             }
         }
 
-        pub fn push(&mut self, diff: Diff) {
+        fn push(&mut self, diff: Diff) {
             self.max_diff.abs = f32::max(self.max_diff.abs, diff.abs);
             self.max_diff.rel = f32::max(self.max_diff.rel, diff.rel);
 
@@ -163,7 +187,7 @@ pub(crate) mod test_utils {
             self.count += 1;
         }
 
-        pub fn outliers(&self) -> &[usize] {
+        fn outliers(&self) -> &[usize] {
             &self.outliers
         }
     }

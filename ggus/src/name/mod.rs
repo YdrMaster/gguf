@@ -57,7 +57,7 @@ impl<'a> TryFrom<&'a Path> for GGufFileName<'a> {
     }
 }
 
-impl<'a> GGufFileName<'a> {
+impl GGufFileName<'_> {
     #[inline]
     pub fn shard_count(&self) -> usize {
         self.shard.count.get() as _
