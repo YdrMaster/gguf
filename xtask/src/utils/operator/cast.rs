@@ -13,22 +13,17 @@ impl Content<'_> {
             self.name.encoding = Some(format!("{mat:?}").into());
         }
         for (name, tensor) in self.tensors.as_mut_slice() {
-            if tensor.shape.len() == 1 {
-                continue;
-            }
             let from = tensor.ty;
             let to = match &**name {
                 "token_embd.weight" | "output.weight" => embd,
                 _ if name.ends_with("_norm.weight") => norm,
                 _ if tensor.shape.len() > 1 => mat,
-                _ => continue,
-            };
+                _ => None,
+            }
+            .filter(|to| from != *to);
             let Some(to) = to else {
                 continue;
             };
-            if from == to {
-                continue;
-            }
 
             debug!("Casting tensor {name} from {from:?} to {to:?}");
             tensor.ty = to;
