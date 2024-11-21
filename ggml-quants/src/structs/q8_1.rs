@@ -11,15 +11,13 @@ pub struct Q8_1 {
     quants: [i8; _32],
 }
 
-impl DataBlock for Q8_1 {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::Q8_1;
-    const COUNT: usize = _32;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    Q8_1 = crate::types::Q8_1;
+    Self {
         delta: f16::ZERO,
         sum: f16::ZERO,
         quants: [0; _32],
-    };
+    }
 }
 
 impl Quantize<f32, _32> for Q8_1 {

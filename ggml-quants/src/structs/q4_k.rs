@@ -8,15 +8,13 @@ pub struct Q4K {
     qs: [u8; _256 / 2],
 }
 
-impl DataBlock for Q4K {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::Q4K;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    Q4K = crate::types::Q4K;
+    Self {
         delta_min: DeltaMin::ZERO,
         scales: [0; 12],
         qs: [0; _256 / 2],
-    };
+    }
 }
 
 impl Quantize<f32, _256> for Q4K {

@@ -1,12 +1,9 @@
 use super::{bf16, f16, _1};
 use crate::{DataBlock, Quantize};
 
-impl DataBlock for f16 {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = digit_layout::types::F16;
-    const COUNT: usize = _1;
-    const ZEROS: Self = Self::ZERO;
-}
+use digit_layout::types as ty;
+impl_data_block!( f16 = ty:: F16;  f16::ZERO);
+impl_data_block!(bf16 = ty::BF16; bf16::ZERO);
 
 impl Quantize<f32, _1> for f16 {
     #[inline]
@@ -21,13 +18,6 @@ impl Quantize<f32, _1> for f16 {
     fn dequantize(&self) -> [f32; _1] {
         [self.to_f32()]
     }
-}
-
-impl DataBlock for bf16 {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = digit_layout::types::BF16;
-    const COUNT: usize = _1;
-    const ZEROS: Self = Self::ZERO;
 }
 
 impl Quantize<f32, _1> for bf16 {

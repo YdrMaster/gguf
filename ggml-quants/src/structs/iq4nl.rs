@@ -7,14 +7,12 @@ pub struct IQ4NL {
     qs: [u16; _32 / 2],
 }
 
-impl DataBlock for IQ4NL {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ4NL;
-    const COUNT: usize = _32;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    IQ4NL = crate::types::IQ4NL;
+    Self {
         delta: f16::ZERO,
         qs: [0; _32 / 2],
-    };
+    }
 }
 
 impl Quantize<f32, _32> for IQ4NL {

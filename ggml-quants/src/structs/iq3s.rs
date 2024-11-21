@@ -10,17 +10,15 @@ pub struct IQ3S {
     scales: [u8; _256 / 64],
 }
 
-impl DataBlock for IQ3S {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ3S;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    IQ3S = crate::types::IQ3S;
+    Self {
         delta: f16::ZERO,
         qs: [0; _256 / 4],
         qh: [0; _256 / 32],
         signs: [0; _256 / 8],
         scales: [0; _256 / 64],
-    };
+    }
 }
 
 impl Quantize<f32, _256> for IQ3S {

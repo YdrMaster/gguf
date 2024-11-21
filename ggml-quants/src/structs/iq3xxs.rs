@@ -7,14 +7,12 @@ pub struct IQ3XXS {
     qs: [u16; 3 * _256 / 8],
 }
 
-impl DataBlock for IQ3XXS {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ3XXS;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    IQ3XXS = crate::types::IQ3XXS;
+    Self {
         delta: f16::ZERO,
         qs: [0; 3 * _256 / 8],
-    };
+    }
 }
 
 impl Quantize<f32, _256> for IQ3XXS {

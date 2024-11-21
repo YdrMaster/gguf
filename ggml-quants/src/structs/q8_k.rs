@@ -10,15 +10,13 @@ pub struct Q8K {
     sums: [i16; _256 / 16],
 }
 
-impl DataBlock for Q8K {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::Q8K;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    Q8K = crate::types::Q8K;
+    Self {
         delta: f16::ZERO,
         quants: [0; _256],
         sums: [0; _256 / 16],
-    };
+    }
 }
 
 impl Quantize<f32, _256> for Q8K {

@@ -9,26 +9,27 @@ pub trait DataBlock: Sized + 'static {
 }
 
 macro_rules! impl_data_block {
-    ($id:ident $ty:ty; $zero:expr ) => {
+    ($ty:ty = $id:expr; $zero:expr ) => {
         impl DataBlock for $ty {
             #[cfg(feature = "types")]
-            const ID: digit_layout::DigitLayout = digit_layout::types::$id;
-            const COUNT: usize = 1;
+            const ID: digit_layout::DigitLayout = $id;
+            const COUNT: usize = Self::ID.group_size();
             const ZEROS: Self = $zero;
         }
     };
 }
 
-impl_data_block!(U8  u8  ; 0 );
-impl_data_block!(I8  i8  ; 0 );
-impl_data_block!(U16 u16 ; 0 );
-impl_data_block!(I16 i16 ; 0 );
-impl_data_block!(U32 u32 ; 0 );
-impl_data_block!(I32 i32 ; 0 );
-impl_data_block!(F32 f32 ; 0.);
-impl_data_block!(U64 u64 ; 0 );
-impl_data_block!(I64 i64 ; 0 );
-impl_data_block!(F64 f64 ; 0.);
+use digit_layout::types as ty;
+impl_data_block!(u8  = ty::U8 ; 0 );
+impl_data_block!(i8  = ty::I8 ; 0 );
+impl_data_block!(u16 = ty::U16; 0 );
+impl_data_block!(i16 = ty::I16; 0 );
+impl_data_block!(u32 = ty::U32; 0 );
+impl_data_block!(i32 = ty::I32; 0 );
+impl_data_block!(f32 = ty::F32; 0.);
+impl_data_block!(u64 = ty::U64; 0 );
+impl_data_block!(i64 = ty::I64; 0 );
+impl_data_block!(f64 = ty::F64; 0.);
 
 pub trait Quantize<T, const N: usize>: DataBlock {
     fn quantize(data: &[T; N]) -> Self;

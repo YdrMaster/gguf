@@ -1,29 +1,33 @@
-﻿use digit_layout::layout;
+﻿macro_rules! layout {
+    ($name:ident; $group:expr) => {
+        digit_layout::layout!($name; [$group] in size_of::<crate::$name>() as _);
+    };
+}
 
-layout!(IQ1M);
-layout!(IQ1S);
-layout!(IQ2S);
-layout!(IQ2XS);
-layout!(IQ2XXS);
-layout!(IQ3S);
-layout!(IQ3XXS);
-layout!(IQ4NL);
-layout!(IQ4XS);
-layout!(Q2K);
-layout!(Q3K);
-layout!(Q4_0);
-layout!(Q4_0_4_4);
-layout!(Q4_0_4_8);
-layout!(Q4_0_8_8);
-layout!(Q4_1);
-layout!(Q4K);
-layout!(Q5_0);
-layout!(Q5_1);
-layout!(Q5K);
-layout!(Q6K);
-layout!(Q8_0);
-layout!(Q8_1);
-layout!(Q8K);
+layout!(IQ1M    ; 256);
+layout!(IQ1S    ; 256);
+layout!(IQ2S    ; 256);
+layout!(IQ2XS   ; 256);
+layout!(IQ2XXS  ; 256);
+layout!(IQ3S    ; 256);
+layout!(IQ3XXS  ; 256);
+layout!(IQ4NL   ;  32);
+layout!(IQ4XS   ; 256);
+layout!(Q2K     ; 256);
+layout!(Q3K     ; 256);
+layout!(Q4_0_4_4; 256);
+layout!(Q4_0_4_8; 256);
+layout!(Q4_0_8_8; 256);
+layout!(Q4_0    ;  32);
+layout!(Q4_1    ;  32);
+layout!(Q4K     ; 256);
+layout!(Q5_0    ;  32);
+layout!(Q5_1    ;  32);
+layout!(Q5K     ; 256);
+layout!(Q6K     ; 256);
+layout!(Q8_0    ;  32);
+layout!(Q8_1    ;  32);
+layout!(Q8K     ; 256);
 
 #[rustfmt::skip]
 #[test]

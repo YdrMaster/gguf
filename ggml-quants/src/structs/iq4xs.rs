@@ -9,16 +9,14 @@ pub struct IQ4XS {
     qs: [u16; _256 / 2],
 }
 
-impl DataBlock for IQ4XS {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::IQ4XS;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    IQ4XS = crate::types::IQ4XS;
+    Self {
         delta: f16::ZERO,
         scales_h: 0,
         scales_l: [0; _256 / 64],
         qs: [0; _256 / 2],
-    };
+    }
 }
 
 impl Quantize<f32, _256> for IQ4XS {

@@ -9,15 +9,13 @@ pub struct Q5_1 {
     ql: [u8; _32 / 2],
 }
 
-impl DataBlock for Q5_1 {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::Q5_1;
-    const COUNT: usize = _32;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    Q5_1 = crate::types::Q5_1;
+    Self {
         delta_min: DeltaMin::ZERO,
         qh: [0; _32 / 8],
         ql: [0; _32 / 2],
-    };
+    }
 }
 
 impl Quantize<f32, _32> for Q5_1 {

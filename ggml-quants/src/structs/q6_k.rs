@@ -10,16 +10,14 @@ pub struct Q6K {
     delta: f16,
 }
 
-impl DataBlock for Q6K {
-    #[cfg(feature = "types")]
-    const ID: digit_layout::DigitLayout = crate::types::Q6K;
-    const COUNT: usize = _256;
-    const ZEROS: Self = Self {
+impl_data_block! {
+    Q6K = crate::types::Q6K;
+    Self {
         ql: [0; _256 / 2],
         qh: [0; _256 / 4],
         scales: [0; _256 / 16],
         delta: f16::ZERO,
-    };
+    }
 }
 
 impl Quantize<f32, _256> for Q6K {
