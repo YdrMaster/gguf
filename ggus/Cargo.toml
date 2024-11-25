@@ -1,10 +1,10 @@
 [package]
 name = "ggus"
 description = "GGUF in Rust🦀"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
-repository = "https://github.com/YdrMaster/gguf"
+repository = "https://github.com/InfiniTensor/gguf"
 documentation = "https://docs.rs/ggus"
 license = "MIT"
 readme = "README.md"
@@ -14,7 +14,7 @@ categories = ["parsing", "parser-implementations", "encoding"]
 [dependencies]
 ggml-quants = { version = "0.0", path = "../ggml-quants" }
 indexmap.workspace = true
-fancy-regex = "0.13"
+fancy-regex = "0.14"
 num_enum = "0.7"
 
 [features]

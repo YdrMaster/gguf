@@ -1,14 +1,14 @@
 ﻿# gguf
 
-[![CI](https://github.com/YdrMaster/gguf/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/YdrMaster/gguf/actions)
-[![license](https://img.shields.io/github/license/YdrMaster/gguf)](https://mit-license.org/)
-![GitHub repo size](https://img.shields.io/github/repo-size/YdrMaster/gguf)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/YdrMaster/gguf)
+[![CI](https://github.com/InfiniTensor/gguf/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/InfiniTensor/gguf/actions)
+[![license](https://img.shields.io/github/license/InfiniTensor/gguf)](https://mit-license.org/)
+![GitHub repo size](https://img.shields.io/github/repo-size/InfiniTensor/gguf)
+![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/InfiniTensor/gguf)
 
-[![GitHub Issues](https://img.shields.io/github/issues/YdrMaster/gguf)](https://github.com/YdrMaster/gguf/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/YdrMaster/gguf)](https://github.com/YdrMaster/gguf/pulls)
-![GitHub contributors](https://img.shields.io/github/contributors/YdrMaster/gguf)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/YdrMaster/gguf)
+[![GitHub Issues](https://img.shields.io/github/issues/InfiniTensor/gguf)](https://github.com/InfiniTensor/gguf/issues)
+[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/InfiniTensor/gguf)](https://github.com/InfiniTensor/gguf/pulls)
+![GitHub contributors](https://img.shields.io/github/contributors/InfiniTensor/gguf)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/InfiniTensor/gguf)
 
 > [ggus 库](/ggus)
 

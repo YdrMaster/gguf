@@ -347,7 +347,7 @@ fn fmt_meta_val(
                 fmt_meta_val(reader, ty, 1, detail, buf)?;
                 buf.push_str(", ");
             }
-            buf.push_str(&format!("...({} more)]", len - detail));
+            buf.push_str(&format!("...({} more of {len})]", len - detail));
         }
     }
     Ok(())
