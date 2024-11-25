@@ -1,4 +1,7 @@
-﻿use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+﻿#![doc = include_str!("../README.md")]
+#![deny(warnings)]
+
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 use std::slice::{from_raw_parts, from_raw_parts_mut};
 
 pub trait DataBlock: Sized + 'static {
