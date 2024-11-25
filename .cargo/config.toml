@@ -1,6 +1,6 @@
 ﻿[alias]
-xtask = "run --package xtask --release --"
-debug = "run --package xtask --"
+xtask = "run --package gguf-utils --release --"
+debug = "run --package gguf-utils --"
 show = "xtask show"
 split = "xtask split"
 merge = "xtask merge"

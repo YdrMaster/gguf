@@ -237,6 +237,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "gguf-utils"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "ggus",
+ "indexmap",
+ "itertools",
+ "log",
+ "memmap2",
+ "rayon",
+ "regex",
+ "simple_logger",
+ "time",
+]
+
+[[package]]
 name = "ggus"
 version = "0.3.0"
 dependencies = [
@@ -752,23 +768,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36c1fec1a2bb5866f07c25f68c26e565c4c200aebb96d7e55710c19d3e8ac49b"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "xtask"
-version = "0.0.0"
-dependencies = [
- "clap",
- "ggml-quants",
- "ggus",
- "indexmap",
- "itertools",
- "log",
- "memmap2",
- "rayon",
- "regex",
- "simple_logger",
- "time",
 ]
 
 [[package]]

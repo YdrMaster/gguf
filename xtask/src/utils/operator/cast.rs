@@ -1,6 +1,8 @@
 ﻿use super::{Content, DataPromise};
-use ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1};
-use ggus::{DataFuture, GGmlType as Ty};
+use ggus::{
+    ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1},
+    DataFuture, GGmlType as Ty,
+};
 use log::debug;
 use memmap2::MmapMut;
 use std::alloc::Layout;

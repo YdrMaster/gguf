@@ -1,17 +1,22 @@
 [package]
-name = "xtask"
+name = "gguf-utils"
+description = "Utilities for handling gguf files"
 version = "0.0.0"
 edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
+repository = "https://github.com/InfiniTensor/gguf"
+documentation = "https://docs.rs/gguf-utils"
+license = "MIT"
+readme = "../README.md"
+keywords = ["gguf", "ggml", "llama-cpp"]
 
 [dependencies]
-ggus.path = "../ggus"
-ggml-quants.path = "../ggml-quants"
 indexmap.workspace = true
 rayon.workspace = true
 itertools = "0.13"
 memmap2 = "0.9"
 regex = "1.11"
+ggus = { path = "../ggus", version = "0.3" }
 clap = { version = "4.5", features = ["derive"] }
 
 time = "0.3"
