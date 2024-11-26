@@ -62,28 +62,6 @@ Options:
   -h, --help                           Print help
 ```
 
-### 内容过滤
-
-```plaintext
-cargo filter --help
-```
-
-```plaintext
-Filter gguf files based on wildcard patterns
-
-Usage: xtask.exe filter [OPTIONS] <FILE>
-
-Arguments:
-  <FILE>  The file to filter
-
-Options:
-  -o, --output-dir <OUTPUT_DIR>        Output directory for filtered file
-  -m, --filter-meta <FILTER_META>      Meta to keep [default: *]
-  -t, --filter-tensor <FILTER_TENSOR>  Tensors to keep [default: *]
-      --log <LOG>                      Log level, may be "off", "trace", "debug", "info" or "error"
-  -h, --help                           Print help
-```
-
 ### 分片
 
 ```plaintext
@@ -125,6 +103,30 @@ Options:
   -o, --output-dir <OUTPUT_DIR>  Output directory for merged file
       --log <LOG>                Log level, may be "off", "trace", "debug", "info" or "error"
   -h, --help                     Print help
+```
+
+### 转换数据类型
+
+```plaintext
+cargo cast --help
+```
+
+```plaintext
+Cast data types in gguf files
+
+Usage: gguf-utils.exe cast [OPTIONS] --types <TYPES> <FILE>
+
+Arguments:
+  <FILE>  File to convert
+
+Options:
+  -t, --types <TYPES>
+  -o, --output-dir <OUTPUT_DIR>    Output directory for converted files
+  -t, --max-tensors <MAX_TENSORS>  Max count of tensors per shard
+  -s, --max-bytes <MAX_BYTES>      Max size in bytes per shard
+  -n, --no-tensor-first            If set, the first shard will not contain any tensor
+      --log <LOG>                  Log level, may be "off", "trace", "debug", "info" or "error"
+  -h, --help                       Print help
 ```
 
 ### 转换格式

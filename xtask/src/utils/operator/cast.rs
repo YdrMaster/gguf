@@ -1,38 +1,75 @@
-﻿use super::{Content, DataPromise};
+﻿use super::{Content, DataPromise, Operator};
 use ggus::{
     ggml_quants::{bf16, f16, QuantExt, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1},
-    DataFuture, GGmlType as Ty,
+    DataFuture, GGmlType as Ty, GGufMetaMapExt,
 };
 use log::debug;
 use memmap2::MmapMut;
-use std::alloc::Layout;
+use regex::Regex;
+use std::{alloc::Layout, collections::HashMap, sync::LazyLock};
+
+impl Operator {
+    #[inline]
+    pub fn cast(types: &str) -> Self {
+        static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\w+):(\w+)").unwrap());
+        Self::Cast(
+            REGEX
+                .captures_iter(types)
+                .map(|captures| {
+                    let key = captures[1].to_string();
+                    let val = parse(&captures[2]);
+                    (key, val)
+                })
+                .collect(),
+        )
+    }
+}
 
 impl Content<'_> {
-    pub(super) fn cast(&mut self, embd: Option<Ty>, norm: Option<Ty>, mat: Option<Ty>) {
-        self.assert_llama();
+    pub(super) fn cast(&mut self, types: HashMap<String, Ty>) {
+        match self.general_architecture().unwrap() {
+            "llama" => {
+                let [mat, embd, norm] =
+                    ["mat", "embd", "norm"].map(|name| types.get(name).copied());
+                self.cast_(mat, |name, shape| match name {
+                    "token_embd.weight" | "output.weight" => embd,
+                    _ if name.ends_with("_norm.weight") => norm,
+                    _ if shape.len() > 1 => mat,
+                    _ => None,
+                })
+            }
+            "clip" => {
+                let [weight, bias] = ["weight", "bias"].map(|name| types.get(name).copied());
+                self.cast_(weight, |name, _| {
+                    if name.ends_with(".weight") {
+                        weight
+                    } else if name.ends_with(".bias") {
+                        bias
+                    } else {
+                        None
+                    }
+                })
+            }
+            arch => panic!("Unsupported architecture: {arch}"),
+        }
+    }
 
-        if let Some(mat) = mat {
-            self.name.encoding = Some(format!("{mat:?}").into());
+    fn cast_(&mut self, main: Option<Ty>, mut ty: impl FnMut(&str, &[u64]) -> Option<Ty>) {
+        if let Some(main) = main {
+            self.name.encoding = Some(format!("{main:?}").into());
         }
         for (name, tensor) in self.tensors.as_mut_slice() {
             let from = tensor.ty;
-            let to = match &**name {
-                "token_embd.weight" | "output.weight" => embd,
-                _ if name.ends_with("_norm.weight") => norm,
-                _ if tensor.shape.len() > 1 => mat,
-                _ => None,
+            let to = ty(name, &tensor.shape);
+
+            if let Some(to) = to.filter(|to| from != *to) {
+                debug!("Casting tensor {name} from {from:?} to {to:?}");
+                tensor.ty = to;
+
+                let data = tensor.data.clone();
+                let row = tensor.shape[0];
+                tensor.data = DataPromise::lazy(move || cast(row as _, data.get(), from, to))
             }
-            .filter(|to| from != *to);
-            let Some(to) = to else {
-                continue;
-            };
-
-            debug!("Casting tensor {name} from {from:?} to {to:?}");
-            tensor.ty = to;
-
-            let data = tensor.data.clone();
-            let row = tensor.shape[0];
-            tensor.data = DataPromise::lazy(move || cast(row as _, data.get(), from, to));
         }
     }
 }
@@ -117,4 +154,54 @@ fn reslice_mut<T>(data: &mut [u8]) -> &mut [T] {
         panic!("data is not aligned");
     };
     data
+}
+
+#[rustfmt::skip]
+fn parse(s: &str) -> Ty {
+    match s.to_ascii_uppercase().as_str() {
+        "F32"      => Ty::F32,
+        "F16"      => Ty::F16,
+        "Q4_0"     => Ty::Q4_0,
+        "Q4_1"     => Ty::Q4_1,
+        "Q5_0"     => Ty::Q5_0,
+        "Q5_1"     => Ty::Q5_1,
+        "Q8_0"     => Ty::Q8_0,
+        "Q8_1"     => Ty::Q8_1,
+        "Q2K"      => Ty::Q2K,
+        "Q3K"      => Ty::Q3K,
+        "Q4K"      => Ty::Q4K,
+        "Q5K"      => Ty::Q5K,
+        "Q6K"      => Ty::Q6K,
+        "Q8K"      => Ty::Q8K,
+        "IQ2XXS"   => Ty::IQ2XXS,
+        "IQ2XS"    => Ty::IQ2XS,
+        "IQ3XXS"   => Ty::IQ3XXS,
+        "IQ1S"     => Ty::IQ1S,
+        "IQ4NL"    => Ty::IQ4NL,
+        "IQ3S"     => Ty::IQ3S,
+        "IQ2S"     => Ty::IQ2S,
+        "IQ4XS"    => Ty::IQ4XS,
+        "I8"       => Ty::I8,
+        "I16"      => Ty::I16,
+        "I32"      => Ty::I32,
+        "I64"      => Ty::I64,
+        "F64"      => Ty::F64,
+        "IQ1M"     => Ty::IQ1M,
+        "BF16"     => Ty::BF16,
+        "Q4_0_4_4" => Ty::Q4_0_4_4,
+        "Q4_0_4_8" => Ty::Q4_0_4_8,
+        "Q4_0_8_8" => Ty::Q4_0_8_8,
+        _          => todo!(),
+    }
+}
+
+#[test]
+fn test_parse() {
+    let Operator::Cast(types) = Operator::cast("embd:f16 mat:q8_0, norm:f32") else {
+        unreachable!()
+    };
+    assert_eq!(types.len(), 3);
+    assert_eq!(types.get("embd"), Some(&Ty::F16));
+    assert_eq!(types.get("mat"), Some(&Ty::Q8_0));
+    assert_eq!(types.get("norm"), Some(&Ty::F32));
 }
