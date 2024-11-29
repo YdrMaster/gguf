@@ -29,25 +29,30 @@ impl Content<'_> {
     pub(super) fn cast(&mut self, types: HashMap<String, Ty>) {
         match self.general_architecture().unwrap() {
             "llama" => {
-                let [mat, embd, norm] =
-                    ["mat", "embd", "norm"].map(|name| types.get(name).copied());
+                let [mat, embd, norm, else_] =
+                    ["mat", "embd", "norm", "else"].map(|name| types.get(name).copied());
                 self.cast_(mat, |name, shape| match name {
                     "token_embd.weight" | "output.weight" => embd,
                     _ if name.ends_with("_norm.weight") => norm,
                     _ if shape.len() > 1 => mat,
-                    _ => None,
+                    _ => else_,
                 })
             }
             "clip" => {
-                let [weight, bias] = ["weight", "bias"].map(|name| types.get(name).copied());
-                self.cast_(weight, |name, _| {
-                    if name.ends_with(".weight") {
-                        weight
-                    } else if name.ends_with(".bias") {
-                        bias
-                    } else {
-                        None
+                let [weight, embd, norm, else_] =
+                    ["weight", "embd", "norm", "else"].map(|name| types.get(name).copied());
+                self.cast_(weight, |name, _| match name.strip_prefix("v.") {
+                    Some(name) => {
+                        if name.contains("embd") {
+                            embd
+                        } else if name.contains("ln") {
+                            // ln for layer norm
+                            norm
+                        } else {
+                            weight
+                        }
                     }
+                    None => else_,
                 })
             }
             arch => panic!("Unsupported architecture: {arch}"),
