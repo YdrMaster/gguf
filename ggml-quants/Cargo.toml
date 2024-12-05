@@ -19,6 +19,7 @@ types = ["digit-layout"]
 rayon.workspace = true
 digit-layout = { version = "0.2", optional = true }
 half = "2.4"
+itertools = "0.13.0"
 
 [dev-dependencies]
 rand = "0.8"
