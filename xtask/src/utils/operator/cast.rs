@@ -31,18 +31,23 @@ impl Content<'_> {
             "llama" => {
                 let [mat, embd, norm, else_] =
                     ["mat", "embd", "norm", "else"].map(|name| types.get(name).copied());
-                self.cast_(mat, |name, shape| match name {
-                    "token_embd.weight" | "output.weight" => embd,
-                    _ if name.ends_with("_norm.weight") => norm,
-                    _ if shape.len() > 1 => mat,
-                    _ => else_,
+                self.cast_(mat, |name, shape| {
+                    if matches!(name, "token_embd.weight" | "output.weight") {
+                        embd
+                    } else if name.ends_with("_norm.weight") {
+                        norm
+                    } else if shape.len() > 1 {
+                        mat
+                    } else {
+                        else_
+                    }
                 })
             }
             "clip" => {
                 let [weight, embd, norm, else_] =
                     ["weight", "embd", "norm", "else"].map(|name| types.get(name).copied());
-                self.cast_(weight, |name, _| match name.strip_prefix("v.") {
-                    Some(name) => {
+                self.cast_(weight, |name, _| {
+                    name.strip_prefix("v.").map_or(else_, |name| {
                         if name.contains("embd") {
                             embd
                         } else if name.contains("ln") {
@@ -51,8 +56,7 @@ impl Content<'_> {
                         } else {
                             weight
                         }
-                    }
-                    None => else_,
+                    })
                 })
             }
             arch => panic!("Unsupported architecture: {arch}"),
